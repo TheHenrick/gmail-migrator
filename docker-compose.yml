@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: gmail-migrator
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - LOG_LEVEL=INFO
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+      - GMAIL_REDIRECT_URI=${GMAIL_REDIRECT_URI}
+      - OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID}
+      - OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET}
+      - OUTLOOK_REDIRECT_URI=${OUTLOOK_REDIRECT_URI}
+      - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID}
+      - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET}
+      - YAHOO_REDIRECT_URI=${YAHOO_REDIRECT_URI}
+    restart: unless-stopped 
