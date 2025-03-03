@@ -3,6 +3,7 @@
 [![CI](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml)
 [![Pre-commit](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml)
 [![Docker Compose Test](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml)
+[![Signed Commits](https://github.com/yourusername/gmail-migrator/actions/workflows/verify-commit-signature.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/verify-commit-signature.yml)
 
 A tool to help users migrate their Gmail emails to other email service providers like Outlook, Yahoo Mail, and others.
 
@@ -80,3 +81,32 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Signed Commits
+
+This repository requires signed commits to enhance security and verify the authenticity of contributions.
+
+To set up signed commits:
+
+1. Generate a GPG key if you don't have one:
+   ```bash
+   gpg --full-generate-key
+   ```
+
+2. Get your GPG key ID:
+   ```bash
+   gpg --list-secret-keys --keyid-format=long
+   ```
+
+3. Configure Git to use your key:
+   ```bash
+   git config --global user.signingkey YOUR_KEY_ID
+   git config --global commit.gpgsign true
+   ```
+
+4. Add your GPG key to your GitHub account: [GitHub GPG Keys](https://github.com/settings/keys)
+
+5. Sign your commits automatically or use the `-S` flag:
+   ```bash
+   git commit -S -m "Your commit message"
+   ```

@@ -1,0 +1,49 @@
+name: Verify Commit Signatures
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-commit-signatures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify commit signatures
+        run: |
+          # Get all commits in the PR (for pull_request) or the push (for push)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Checking commits in PR #${{ github.event.pull_request.number }}"
+            COMMITS=$(git log --format="%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          else
+            echo "Checking commits in push"
+            COMMITS=$(git log --format="%H" ${{ github.event.before }}..${{ github.event.after }})
+          fi
+
+          # Check each commit for a valid signature
+          UNSIGNED_COMMITS=0
+          for COMMIT in $COMMITS; do
+            SIGNATURE=$(git verify-commit $COMMIT 2>&1 || echo "UNSIGNED")
+            if [[ $SIGNATURE == *"UNSIGNED"* ]]; then
+              echo "❌ Unsigned commit: $COMMIT"
+              git log -1 --pretty=format:"%h %an <%ae> %s" $COMMIT
+              UNSIGNED_COMMITS=$((UNSIGNED_COMMITS + 1))
+            else
+              echo "✅ Signed commit: $COMMIT"
+              git log -1 --pretty=format:"%h %an <%ae> %s" $COMMIT
+            fi
+          done
+
+          # Fail if there are unsigned commits
+          if [ $UNSIGNED_COMMITS -gt 0 ]; then
+            echo "::error::Found $UNSIGNED_COMMITS unsigned commits. All commits must be signed."
+            exit 1
+          fi
+
+          echo "All commits are properly signed! ✅"
