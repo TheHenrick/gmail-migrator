@@ -4,10 +4,9 @@ import base64
 import json
 import os
 from collections.abc import Generator
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from google.oauth2.credentials import Credentials
 
 from app.services.gmail.client import GmailClient
 from app.services.gmail.labels import GmailLabelsService
@@ -82,34 +81,40 @@ def test_init() -> None:
 
 
 @patch("app.services.gmail.client.build")
-@patch("app.services.gmail.client.flow_from_clientsecrets")
-@patch("app.services.gmail.client.run_flow")
+@patch("app.services.gmail.client.InstalledAppFlow")
 def test_authenticate(
-    mock_run_flow: MagicMock,
-    mock_flow_from_clientsecrets: MagicMock,
+    mock_installed_app_flow: MagicMock,
     mock_build: MagicMock,
     test_credentials_file: str,
 ) -> None:
     """Test authentication process."""
     # Setup
-    mock_credentials = Mock(spec=Credentials)
+    mock_flow = MagicMock()
+    mock_installed_app_flow.from_client_secrets_file.return_value = mock_flow
+
+    mock_credentials = MagicMock()
     mock_credentials.token = "test_token"
     mock_credentials.refresh_token = "test_refresh_token"
     mock_credentials.token_uri = "test_token_uri"
     mock_credentials.client_id = "test_client_id"
     mock_credentials.client_secret = "test_client_secret"
-    mock_credentials._scopes = ["https://mail.google.com/"]
+    mock_credentials.scopes = ["https://mail.google.com/"]
 
-    mock_run_flow.return_value = mock_credentials
+    mock_flow.run_local_server.return_value = mock_credentials
 
     # Execute
     client = GmailClient(credentials_path=test_credentials_file)
     result = client.authenticate()
 
     # Verify
-    assert mock_flow_from_clientsecrets.called
-    assert mock_run_flow.called
-    assert mock_build.called
+    mock_installed_app_flow.from_client_secrets_file.assert_called_once_with(
+        test_credentials_file,
+        [
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.labels",
+        ],
+    )
+    mock_flow.run_local_server.assert_called_once_with(port=0)
 
     assert result["token"] == "test_token"
     assert result["refresh_token"] == "test_refresh_token"
@@ -142,7 +147,7 @@ def test_get_email_list(
     )
     assert result["messages"][0]["id"] == "msg1"
     assert result["messages"][1]["id"] == "msg2"
-    assert result["nextPageToken"] == "next_token"
+    assert result["next_page_token"] == "next_token"
 
 
 def test_get_email_content(
@@ -194,6 +199,7 @@ def test_get_email_content(
     assert result["from"] == "sender@example.com"
     assert result["to"] == "recipient@example.com"
     assert result["date"] == "Mon, 1 Jan 2023 12:00:00 +0000"
+    assert "body" in result
     assert result["body"]["plain"] == "Email body"
     assert result["body"]["html"] == "<html>Email body</html>"
     assert len(result["attachments"]) == 1
@@ -260,15 +266,23 @@ def mock_message():
                     "partId": "0",
                     "mimeType": "text/plain",
                     "body": {
-                        "data": "VGhpcyBpcyBhIHRlc3QgZW1haWwgYm9keQ=="  # "This is a test email body"
+                        "data": base64.b64encode(b"This is a test email").decode()
                     },
                 },
                 {
                     "partId": "1",
                     "mimeType": "text/html",
                     "body": {
-                        "data": "PGRpdj5UaGlzIGlzIGEgdGVzdCBlbWFpbCBib2R5PC9kaXY+"  # "<div>This is a test email body</div>"
+                        "data": base64.b64encode(
+                            b"<div>This is a test email</div>"
+                        ).decode()
                     },
+                },
+                {
+                    "partId": "2",
+                    "mimeType": "application/pdf",
+                    "filename": "test.pdf",
+                    "body": {"attachmentId": "attachment123"},
                 },
             ],
         },
@@ -321,22 +335,33 @@ def mock_labels():
 
 def test_build_service(gmail_client):
     """Test building the Gmail API service."""
+    # Set credentials to avoid ValueError
+    gmail_client.credentials = {
+        "token": "test_token",
+        "refresh_token": "test_refresh_token",
+        "token_uri": "test_token_uri",
+        "client_id": "test_client_id",
+        "client_secret": "test_client_secret",
+        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+    }
+
     with patch("app.services.gmail.client.build") as mock_build:
         gmail_client._build_service()
         mock_build.assert_called_once()
 
 
 def test_parse_email_content(gmail_client, mock_message):
-    """Test parsing an email message."""
-    # Call the method
+    """Test parsing email content from Gmail API format."""
     result = gmail_client.parse_email_content(mock_message)
 
-    # Verify the result
+    # Basic assertions
     assert result["id"] == "12345"
-    assert result["subject"] == "Test Subject"
-    assert result["from"] == "Test Sender <sender@example.com>"
-    assert "body_text" in result
-    assert "body_html" in result
+    assert result["thread_id"] == "12345"
+    assert "body" in result
+    assert result["body"]["plain"] == "This is a test email"
+    assert result["body"]["html"] == "<div>This is a test email</div>"
+    assert len(result["attachments"]) == 1
+    assert result["attachments"][0]["filename"] == "test.pdf"
 
 
 def test_get_all_labels(gmail_client, mock_labels):

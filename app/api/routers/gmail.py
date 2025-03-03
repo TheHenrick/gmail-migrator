@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client
+from app.services.gmail.auth import oauth_flow
 from app.services.gmail.client import GmailClient
 
 # Set up logging
@@ -224,3 +225,41 @@ async def get_attachment(
     except Exception as e:
         logger.exception("Error retrieving attachment")
         raise_server_error("Failed to retrieve attachment", e)
+
+
+# Auth-related endpoints
+@router.get("/auth-url", response_model=dict[str, str])
+async def get_auth_url() -> dict[str, str]:
+    """
+    Generate an authorization URL for Gmail OAuth flow.
+
+    Returns:
+        A dictionary containing the authorization URL
+    """
+    try:
+        auth_url, state = oauth_flow.get_authorization_url()
+        return {"auth_url": auth_url, "state": state}
+    except Exception as e:
+        logger.exception("Error generating auth URL")
+        raise_server_error("Failed to generate auth URL", e)
+
+
+@router.get("/auth-callback", response_model=dict[str, str])
+async def auth_callback(
+    code: str = Query(..., description="Authorization code"),
+) -> dict[str, str]:
+    """
+    Handle OAuth callback with authorization code.
+
+    Args:
+        code: Authorization code from Google OAuth
+
+    Returns:
+        A success message
+    """
+    try:
+        oauth_flow.exchange_code(code)
+        return {"message": "Authentication successful"}
+    except Exception as e:
+        logger.exception("Error during OAuth callback")
+        raise_server_error("Authentication failed", e)
