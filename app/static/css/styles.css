@@ -259,16 +259,16 @@ footer {
     .account-selector {
         flex-direction: column;
     }
-    
+
     .date-inputs {
         flex-direction: column;
     }
-    
+
     .card {
         padding: var(--spacing-medium);
     }
-    
+
     .container {
         padding: var(--spacing-medium);
     }
-} 
+}

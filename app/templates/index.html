@@ -13,12 +13,12 @@
             <h1>Gmail Migrator</h1>
             <p class="subtitle">Transfer your emails to a new service</p>
         </header>
-        
+
         <main>
             <section class="card migrate-card">
                 <h2>Start Migration</h2>
                 <p>Connect your accounts and begin transferring your emails to a new service.</p>
-                
+
                 <div class="source-section">
                     <h3>Source Account</h3>
                     <div class="account-selector">
@@ -27,10 +27,10 @@
                             <span>Gmail</span>
                         </div>
                     </div>
-                    
+
                     <button class="button primary" id="connectGmail">Connect Gmail</button>
                 </div>
-                
+
                 <div class="destination-section">
                     <h3>Destination Account</h3>
                     <div class="account-selector">
@@ -43,14 +43,14 @@
                             <span>Yahoo Mail</span>
                         </div>
                     </div>
-                    
+
                     <button class="button secondary" id="connectDestination" disabled>Connect Destination</button>
                 </div>
             </section>
-            
+
             <section class="card options-card">
                 <h2>Migration Options</h2>
-                
+
                 <div class="option-item">
                     <label class="toggle">
                         <input type="checkbox" id="preserveFolders" checked>
@@ -61,7 +61,7 @@
                         <p>Keep your folder structure intact when transferring emails</p>
                     </div>
                 </div>
-                
+
                 <div class="option-item">
                     <label class="toggle">
                         <input type="checkbox" id="includeAttachments" checked>
@@ -72,7 +72,7 @@
                         <p>Transfer attachments along with email content</p>
                     </div>
                 </div>
-                
+
                 <div class="option-item">
                     <label class="toggle">
                         <input type="checkbox" id="onlyUnread">
@@ -83,7 +83,7 @@
                         <p>Transfer only unread emails</p>
                     </div>
                 </div>
-                
+
                 <div class="date-filter">
                     <h4>Date Range (Optional)</h4>
                     <div class="date-inputs">
@@ -98,15 +98,15 @@
                     </div>
                 </div>
             </section>
-            
+
             <button class="button primary start-button" id="startMigration" disabled>Start Migration</button>
         </main>
-        
+
         <footer>
             <p>© 2023 Gmail Migrator. All rights reserved.</p>
         </footer>
     </div>
-    
+
     <script src="{{ url_for('static', path='/js/main.js') }}"></script>
 </body>
-</html> 
+</html>
