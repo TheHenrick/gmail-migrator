@@ -17,6 +17,10 @@ jobs:
 
       - name: Verify commit signatures
         run: |
+          # Define the cutoff commit after which signatures are required
+          # This is the commit that introduced the signed commit requirement
+          SIGNATURE_REQUIREMENT_COMMIT="dea847bd8f790ab69280e3e95e1f3c48fb0b2158"
+
           # Get all commits in the PR (for pull_request) or the push (for push)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Checking commits in PR #${{ github.event.pull_request.number }}"
@@ -26,9 +30,23 @@ jobs:
             COMMITS=$(git log --format="%H" ${{ github.event.before }}..${{ github.event.after }})
           fi
 
-          # Check each commit for a valid signature
+          # Skip check if working with historical commits
+          if git merge-base --is-ancestor $SIGNATURE_REQUIREMENT_COMMIT ${{ github.event.after || github.event.pull_request.head.sha }}; then
+            echo "Checking commits made after the signature policy was introduced"
+          else
+            echo "All commits are from before the signature policy was introduced - skipping verification"
+            exit 0
+          fi
+
+          # Check each commit for a valid signature, but only if it's newer than the requirement commit
           UNSIGNED_COMMITS=0
           for COMMIT in $COMMITS; do
+            # Skip commits that are the requirement commit or older
+            if git merge-base --is-ancestor $COMMIT $SIGNATURE_REQUIREMENT_COMMIT; then
+              echo "⏭️ Skipping historical commit: $COMMIT (made before signature requirement)"
+              continue
+            fi
+
             SIGNATURE=$(git verify-commit $COMMIT 2>&1 || echo "UNSIGNED")
             if [[ $SIGNATURE == *"UNSIGNED"* ]]; then
               echo "❌ Unsigned commit: $COMMIT"

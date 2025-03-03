@@ -21,7 +21,7 @@ If you discover a security vulnerability in Gmail Migrator, please follow these 
 
 ### Signed Commits
 
-All commits to this repository must be signed with a GPG key. This ensures that commits are verified and authenticated by their authors.
+All commits to this repository must be signed with a GPG key. This ensures that commits are verified and authenticated by their authors. **This requirement applies to all new commits made after March 2025.**
 
 To sign your commits:
 

@@ -20,7 +20,10 @@ updates:
         patterns:
           - "*"
         update-types:
-          - "security"
+          - "patch"
+          - "minor"
+    # Use vulnerability alerts instead
+    vulnerability-alerts: true
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"

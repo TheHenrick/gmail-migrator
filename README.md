@@ -84,7 +84,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Signed Commits
 
-This repository requires signed commits to enhance security and verify the authenticity of contributions.
+This repository requires signed commits to enhance security and verify the authenticity of contributions. **This requirement applies to all commits made after March 2025.**
 
 To set up signed commits:
 
