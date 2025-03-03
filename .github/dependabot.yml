@@ -22,8 +22,6 @@ updates:
         update-types:
           - "patch"
           - "minor"
-    # Use vulnerability alerts instead
-    vulnerability-alerts: true
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"
