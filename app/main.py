@@ -1,29 +1,31 @@
-"""
-Main application module for Gmail Migrator.
-"""
+"""Main application module for Gmail Migrator."""
+
 import logging
-from fastapi import FastAPI, Request
+import sys
+from pathlib import Path
+
+import uvicorn
+from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
 
+from app.app import create_app
 from app.config import settings
-from app.api.routers.gmail import router as gmail_router
 
 # Set up logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("app.log"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
-app = FastAPI(
-    title="Gmail Migrator",
-    description="API for migrating emails from Gmail to other email services",
-    version="0.1.0",
-)
+app = create_app()
 
 # Set up templates
 templates_path = Path(__file__).parent / "templates"
@@ -35,9 +37,15 @@ app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def root(request: Request) -> HTMLResponse:
     """
     Home page route.
+
+    Args:
+        request: The incoming request
+
+    Returns:
+        HTML response with the home page
     """
     return templates.TemplateResponse(
         "index.html", {"request": request, "title": "Gmail Migrator"}
@@ -45,17 +53,22 @@ async def root(request: Request):
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     """
     Health check endpoint.
+
+    Returns:
+        Dictionary with service status
     """
     return {"status": "healthy"}
 
 
-# Include routers
-app.include_router(gmail_router)
-
-
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True) 
+    # For local development only, use 127.0.0.1 instead of 0.0.0.0 for security
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=settings.DEBUG,
+        access_log=True,
+    )

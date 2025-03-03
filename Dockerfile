@@ -24,5 +24,5 @@ ENV PYTHONUNBUFFERED=1
 # Expose port for the application
 EXPOSE 8000
 
-# Run the application with Flask
-CMD ["flask", "--app", "app.app:create_app()", "run", "--host", "0.0.0.0", "--port", "8000"] 
+# Run the application with uvicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

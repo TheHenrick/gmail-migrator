@@ -11,8 +11,6 @@ services:
     environment:
       - DEBUG=True
       - LOG_LEVEL=INFO
-      - FLASK_APP=app.app:create_app()
-      - FLASK_DEBUG=1
       - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
       - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
       - GMAIL_REDIRECT_URI=${GMAIL_REDIRECT_URI}
@@ -22,4 +20,4 @@ services:
       - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID}
       - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET}
       - YAHOO_REDIRECT_URI=${YAHOO_REDIRECT_URI}
-    restart: unless-stopped 
+    restart: unless-stopped

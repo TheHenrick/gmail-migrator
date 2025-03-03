@@ -1,115 +1,185 @@
-"""
-Gmail labels service for fetching and managing Gmail labels (folders).
-"""
-import logging
-from typing import List, Dict, Any, Optional
+"""Service for managing Gmail labels and folders."""
 
-from googleapiclient.errors import HttpError
+import logging
+from typing import Any, Protocol
+
+from googleapiclient.discovery import Resource
 
 logger = logging.getLogger(__name__)
+
+
+class GmailClientProtocol(Protocol):
+    """Protocol for GmailClient to avoid circular imports."""
+
+    service: Resource | None
 
 
 class GmailLabelsService:
     """Service for handling Gmail labels (folders)."""
 
-    def __init__(self, gmail_client):
+    def __init__(self, gmail_client: GmailClientProtocol) -> None:
         """
         Initialize the labels service.
-        
+
         Args:
-            gmail_client: An authenticated Gmail client instance
+            gmail_client: Gmail client instance with API service
         """
         self.gmail_client = gmail_client
-        
-    def get_all_labels(self) -> List[Dict[str, Any]]:
+        self.service = gmail_client.service
+        self._all_labels_cache = None
+
+    def _ensure_service(self) -> None:
+        """Ensure the service is available and up-to-date."""
+        if not self.service:
+            self.service = self.gmail_client.service
+
+    def get_all_labels(self) -> list[dict[str, Any]]:
         """
-        Fetch all labels from the user's Gmail account.
-        
+        Get all available labels from Gmail.
+
         Returns:
-            A list of label objects
+            List of label objects with id, name, and type
         """
-        try:
-            if not self.gmail_client.service:
-                self.gmail_client._build_service()
-                
-            results = self.gmail_client.service.users().labels().list(userId='me').execute()
-            labels = results.get('labels', [])
-            
-            # Sort labels: system labels first, then user labels alphabetically
-            system_labels = [label for label in labels if label.get('type') == 'system']
-            user_labels = [label for label in labels if label.get('type') == 'user']
-            
-            # Sort system labels by name for consistency
-            system_labels.sort(key=lambda x: x.get('name', ''))
-            # Sort user labels alphabetically
-            user_labels.sort(key=lambda x: x.get('name', ''))
-            
-            return system_labels + user_labels
-        except HttpError as error:
-            logger.error(f"Error fetching labels: {error}")
+        if self._all_labels_cache:
+            return self._all_labels_cache
+
+        self._ensure_service()
+        if not self.service:
+            logger.error("Gmail service not available")
             return []
-            
-    def get_label_details(self, label_id: str) -> Optional[Dict[str, Any]]:
+
+        try:
+            response = self.service.users().labels().list(userId="me").execute()
+            labels = response.get("labels", [])
+
+            # Transform into a simpler format
+            transformed_labels = []
+            for label in labels:
+                label_type = "system"
+                if label["type"] == "user":
+                    label_type = "custom"
+
+                transformed_labels.append(
+                    {
+                        "id": label["id"],
+                        "name": label["name"],
+                        "type": label_type,
+                    }
+                )
+
+            # Cache results for future use
+            self._all_labels_cache = transformed_labels
+
+            return transformed_labels
+        except Exception:
+            logger.exception("Error fetching Gmail labels")
+            return []
+
+    def get_label_details(self, label_id: str) -> dict[str, Any] | None:
         """
-        Get detailed information about a specific label.
-        
+        Get details of a specific label.
+
         Args:
-            label_id: The ID of the label to fetch
-            
+            label_id: Gmail label ID
+
         Returns:
             Label details or None if not found
         """
-        try:
-            if not self.gmail_client.service:
-                self.gmail_client._build_service()
-                
-            label = self.gmail_client.service.users().labels().get(userId='me', id=label_id).execute()
-            return label
-        except HttpError as error:
-            logger.error(f"Error fetching label {label_id}: {error}")
+        self._ensure_service()
+        if not self.service:
+            logger.error("Gmail service not available")
             return None
-            
-    def create_label_map(self) -> Dict[str, str]:
+
+        try:
+            return self.service.users().labels().get(userId="me", id=label_id).execute()
+        except Exception:
+            logger.exception(f"Error fetching label details for {label_id}")
+            return None
+
+    def create_label_map(self) -> dict[str, str]:
         """
-        Create a mapping of label names to IDs for easier reference.
-        
+        Create a mapping of label names to IDs.
+
         Returns:
-            Dictionary mapping label names to their IDs
+            Dictionary mapping label names to IDs
         """
         labels = self.get_all_labels()
-        return {label.get('name'): label.get('id') for label in labels}
-        
-    def get_nested_labels(self) -> Dict[str, Any]:
+        return {label["name"]: label["id"] for label in labels}
+
+    def get_nested_labels(self) -> dict[str, Any]:
         """
-        Organize labels into a nested structure based on '/' delimiter in names.
-        
+        Create a nested structure of labels based on their paths.
+
         Returns:
-            Nested dictionary representing the label hierarchy
+            Nested dictionary structure representing the label hierarchy
         """
         labels = self.get_all_labels()
-        root = {'children': {}, 'labels': []}
-        
-        # First add system labels at the root
-        system_labels = [label for label in labels if label.get('type') == 'system']
-        root['labels'].extend(system_labels)
-        
-        # Then organize user labels in a hierarchy
-        user_labels = [label for label in labels if label.get('type') == 'user']
-        
-        for label in user_labels:
-            name = label.get('name', '')
-            parts = name.split('/')
-            
-            current = root
-            # For nested labels (e.g., "Parent/Child")
+        nested = {"": {"children": {}, "type": "folder"}}
+
+        for label in labels:
+            # Skip system labels for nesting
+            if label["type"] == "system":
+                continue
+
+            name = label["name"]
+            # Skip labels without path separators
+            if "/" not in name:
+                nested[""]["children"][name] = {
+                    "id": label["id"],
+                    "type": "label",
+                    "children": {},
+                }
+                continue
+
+            # Process nested path
+            parts = name.split("/")
+            parent_path = ""
+
             for i, part in enumerate(parts):
-                if i == len(parts) - 1:  # Last part (leaf node)
-                    if part not in current['children']:
-                        current['children'][part] = {'children': {}, 'labels': []}
-                    current['children'][part]['labels'].append(label)
-                else:  # Parent folders
-                    if part not in current['children']:
-                        current['children'][part] = {'children': {}, 'labels': []}
-                    current = current['children'][part]
-        
-        return root 
+                # Use ternary operator for path construction
+                parent_path = part if i == 0 else f"{parent_path}/{part}"
+
+                if i < len(parts) - 1:
+                    # This is a folder in the path
+                    current = nested
+                    path_parts = parent_path.split("/")
+
+                    # Navigate to the correct place in the nested dict
+                    for pp in path_parts:
+                        if pp == "":
+                            continue
+
+                        if pp not in current["children"]:
+                            current["children"][pp] = {
+                                "children": {},
+                                "type": "folder",
+                            }
+
+                        current = current["children"][pp]
+                else:
+                    # This is the final label
+                    current = nested
+                    path_parts = parent_path.split("/")
+
+                    # Navigate to the parent folder
+                    for j, pp in enumerate(path_parts):
+                        if pp == "":
+                            continue
+
+                        if j == len(path_parts) - 1:
+                            # Last part is the label itself
+                            current["children"][pp] = {
+                                "id": label["id"],
+                                "type": "label",
+                                "children": {},
+                            }
+                        else:
+                            if pp not in current["children"]:
+                                current["children"][pp] = {
+                                    "children": {},
+                                    "type": "folder",
+                                }
+
+                            current = current["children"][pp]
+
+        return nested

@@ -1,12 +1,10 @@
-"""
-Gmail API client for authentication and fetching emails.
-"""
+"""Gmail API client for authentication and fetching emails."""
+
+import base64
 import logging
 import time
-import base64
-import email
-from email.mime.text import MIMEText
-from typing import List, Dict, Any, Optional, Generator, Tuple
+from collections.abc import Generator
+from typing import Any
 
 import google.oauth2.credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -18,7 +16,13 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Define the scopes required by Gmail API
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.labels",
+]
+
+# Error messages
+NO_CREDENTIALS_ERROR = "No credentials available. Please authenticate first."
 
 # Rate limiting parameters
 MAX_REQUESTS_PER_MINUTE = settings.RATE_LIMIT_REQUESTS
@@ -27,351 +31,363 @@ REQUEST_INTERVAL = 60.0 / MAX_REQUESTS_PER_MINUTE  # seconds between requests
 
 class GmailClient:
     """Client for interfacing with the Gmail API."""
-    
-    def __init__(self, credentials: Optional[Dict[str, Any]] = None):
+
+    def __init__(self, credentials: dict[str, Any] | None = None) -> None:
         """
         Initialize the Gmail client.
-        
+
         Args:
-            credentials: OAuth2 credentials for Gmail API access
+            credentials: OAuth credentials for Gmail API access
         """
         self.credentials = credentials
         self.service = None
+        self.request_count = 0
+        self.requests_per_minute = settings.RATE_LIMIT_REQUESTS
         self._last_request_time = 0
-    
-    def authenticate(self) -> Dict[str, Any]:
+
+    def authenticate(self) -> dict[str, Any]:
         """
         Authenticate with Gmail API using OAuth2.
-        
+
         Returns:
             Dictionary containing OAuth credentials
         """
-        flow = InstalledAppFlow.from_client_config(
-            {
-                "installed": {
-                    "client_id": settings.GMAIL_CLIENT_ID,
-                    "client_secret": settings.GMAIL_CLIENT_SECRET,
-                    "redirect_uris": [settings.GMAIL_REDIRECT_URI],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token"
-                }
-            },
-            SCOPES
+        # Create a flow instance with client secrets
+        flow = InstalledAppFlow.from_client_secrets_file(
+            "credentials.json", GMAIL_SCOPES
         )
-        
-        # Run the local server flow
-        credentials = flow.run_local_server(port=8080)
+
+        # Run the OAuth flow
+        credentials = flow.run_local_server(port=0)
+
+        # Store credentials
         self.credentials = {
-            'token': credentials.token,
-            'refresh_token': credentials.refresh_token,
-            'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
-            'scopes': credentials.scopes
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "token_uri": credentials.token_uri,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes,
         }
-        
-        # Build the service
-        self._build_service()
-        
+
         return self.credentials
-    
-    def _build_service(self):
+
+    def _build_service(self) -> None:
         """Build the Gmail API service."""
         if not self.credentials:
-            raise ValueError("No credentials available. Please authenticate first.")
-        
+            error_msg = NO_CREDENTIALS_ERROR
+            raise ValueError(error_msg)
+
         credentials = google.oauth2.credentials.Credentials(
-            token=self.credentials.get('token'),
-            refresh_token=self.credentials.get('refresh_token'),
-            token_uri=self.credentials.get('token_uri'),
-            client_id=self.credentials.get('client_id'),
-            client_secret=self.credentials.get('client_secret'),
-            scopes=self.credentials.get('scopes')
+            token=self.credentials.get("token"),
+            refresh_token=self.credentials.get("refresh_token"),
+            token_uri=self.credentials.get("token_uri"),
+            client_id=self.credentials.get("client_id"),
+            client_secret=self.credentials.get("client_secret"),
+            scopes=self.credentials.get("scopes"),
         )
-        
-        self.service = build('gmail', 'v1', credentials=credentials)
-    
-    def _rate_limit_request(self):
+
+        self.service = build("gmail", "v1", credentials=credentials)
+
+    def _rate_limit_request(self) -> None:
         """
         Implement rate limiting to avoid hitting Gmail API limits.
+
         This ensures we wait a minimum amount of time between requests.
         """
         current_time = time.time()
         time_since_last_request = current_time - self._last_request_time
-        
-        if time_since_last_request < REQUEST_INTERVAL:
-            sleep_time = REQUEST_INTERVAL - time_since_last_request
-            logger.debug(f"Rate limiting: Sleeping for {sleep_time:.2f} seconds")
-            time.sleep(sleep_time)
-            
+
+        # If less than the minimum interval has passed, wait
+        min_interval = 60.0 / self.requests_per_minute
+        if time_since_last_request < min_interval:
+            time_to_wait = min_interval - time_since_last_request
+            time.sleep(time_to_wait)
+
+        # Update last request time
         self._last_request_time = time.time()
-    
-    def get_email_list(self, query: str = '', max_results: int = 100, page_token: Optional[str] = None) -> Dict[str, Any]:
+
+    def get_email_list(
+        self, query: str = "", max_results: int = 100, page_token: str | None = None
+    ) -> dict[str, Any]:
         """
         Get a list of emails matching the query.
-        
+
         Args:
-            query: Gmail search query
-            max_results: Maximum number of results per page
+            query: Search query in Gmail format
+            max_results: Maximum number of results to return
             page_token: Token for pagination
-            
+
         Returns:
-            Dictionary containing email metadata and next page token
+            Dictionary with email list and next page token
         """
-        if not self.service:
-            self._build_service()
-        
         try:
             self._rate_limit_request()
-            
-            request = {
-                'userId': 'me',
-                'q': query,
-                'maxResults': min(max_results, settings.MAX_EMAILS_PER_BATCH)
-            }
-            
-            if page_token:
-                request['pageToken'] = page_token
-                
-            results = self.service.users().messages().list(**request).execute()
-            
+
+            if not self.service:
+                self._build_service()
+
+            # Execute the Gmail API request
+            result = (
+                self.service.users()
+                .messages()
+                .list(
+                    userId="me",
+                    q=query,
+                    maxResults=max_results,
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+
+            # Extract messages and next page token
+            messages = result.get("messages", [])
+            next_page_token = result.get("nextPageToken")
+
             return {
-                'messages': results.get('messages', []),
-                'next_page_token': results.get('nextPageToken')
+                "messages": messages,
+                "next_page_token": next_page_token,
             }
-        except HttpError as error:
-            logger.error(f"Error fetching emails: {error}")
-            return {'messages': [], 'next_page_token': None}
-    
-    def get_email_batches(self, query: str = '', batch_size: int = 100) -> Generator[List[Dict[str, Any]], None, None]:
+        except HttpError:
+            logger.exception("Error fetching emails")
+            return {"messages": [], "next_page_token": None}
+
+    def get_email_batches(
+        self, query: str = "", batch_size: int = 100
+    ) -> Generator[list[dict[str, Any]], None, None]:
         """
         Get batches of emails using pagination.
-        
+
         Args:
-            query: Gmail search query
+            query: Search query in Gmail format
             batch_size: Number of emails per batch
-            
+
         Yields:
-            Batches of email metadata
+            Batches of email messages
         """
         page_token = None
-        
         while True:
-            result = self.get_email_list(query, batch_size, page_token)
-            messages = result.get('messages', [])
-            
+            result = self.get_email_list(
+                query=query, max_results=batch_size, page_token=page_token
+            )
+            messages = result.get("messages", [])
+
             if not messages:
                 break
-                
+
             yield messages
-            
-            page_token = result.get('next_page_token')
+
+            page_token = result.get("next_page_token")
             if not page_token:
                 break
-                
-            # Short pause between pagination requests
+
+            # Add a small delay between requests
             time.sleep(0.5)
-    
-    def get_email_content(self, message_id: str) -> Dict[str, Any]:
+
+    def get_email_content(self, message_id: str) -> dict[str, Any]:
         """
         Get the full content of an email by its ID.
-        
+
         Args:
             message_id: The Gmail message ID
-            
+
         Returns:
-            Dictionary containing email content
+            Parsed email content as a dictionary
         """
-        if not self.service:
-            self._build_service()
-        
         try:
             self._rate_limit_request()
-            
-            message = self.service.users().messages().get(
-                userId='me', 
-                id=message_id,
-                format='full'
-            ).execute()
-            
-            return message
-        except HttpError as error:
-            logger.error(f"Error fetching email content: {error}")
+
+            if not self.service:
+                self._build_service()
+
+            # Get the full message
+            result = (
+                self.service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+                .execute()
+            )
+
+            return self.parse_email_content(result)
+        except HttpError:
+            logger.exception("Error fetching email content")
             return {}
-    
-    def get_attachment(self, message_id: str, attachment_id: str) -> Optional[bytes]:
+
+    def get_attachment(self, message_id: str, attachment_id: str) -> bytes | None:
         """
         Get an email attachment.
-        
+
         Args:
             message_id: The Gmail message ID
             attachment_id: The attachment ID
-        
+
         Returns:
-            The attachment data or None if not found
+            Attachment binary data or None if not found
         """
-        if not self.service:
-            self._build_service()
-            
         try:
             self._rate_limit_request()
-            
-            attachment = self.service.users().messages().attachments().get(
-                userId='me',
-                messageId=message_id,
-                id=attachment_id
-            ).execute()
-            
-            if 'data' in attachment:
-                # Convert from urlsafe base64 to standard base64
-                data = attachment['data'].replace('-', '+').replace('_', '/')
-                # Add padding if needed
-                padding = 4 - (len(data) % 4)
-                if padding:
-                    data += '=' * padding
-                
-                return base64.b64decode(data)
-            
+
+            if not self.service:
+                self._build_service()
+
+            # Get the attachment
+            attachment = (
+                self.service.users()
+                .messages()
+                .attachments()
+                .get(userId="me", messageId=message_id, id=attachment_id)
+                .execute()
+            )
+
+            # Get the attachment data
+            data = attachment.get("data")
+            if data:
+                return base64.urlsafe_b64decode(data)
+
             return None
-        except HttpError as error:
-            logger.error(f"Error fetching attachment: {error}")
+        except HttpError:
+            logger.exception("Error fetching attachment")
             return None
-    
-    def parse_email_content(self, message: Dict[str, Any]) -> Dict[str, Any]:
+
+    def parse_email_content(self, message: dict[str, Any]) -> dict[str, Any]:
         """
         Parse Gmail API message format into a more usable structure.
-        
+
         Args:
-            message: The Gmail message object
-            
+            message: The raw message from Gmail API
+
         Returns:
-            Dictionary with parsed email contents
+            Parsed email data as a dictionary
         """
-        if not message:
-            return {}
-            
-        headers = {header['name'].lower(): header['value'] 
-                  for header in message.get('payload', {}).get('headers', [])}
-        
-        # Extract basic email metadata
+        # Initialize email data
         email_data = {
-            'id': message.get('id', ''),
-            'thread_id': message.get('threadId', ''),
-            'label_ids': message.get('labelIds', []),
-            'snippet': message.get('snippet', ''),
-            'subject': headers.get('subject', ''),
-            'from': headers.get('from', ''),
-            'to': headers.get('to', ''),
-            'cc': headers.get('cc', ''),
-            'bcc': headers.get('bcc', ''),
-            'date': headers.get('date', ''),
-            'content_type': '',
-            'body_text': '',
-            'body_html': '',
-            'attachments': []
+            "id": message.get("id", ""),
+            "thread_id": message.get("threadId", ""),
+            "label_ids": message.get("labelIds", []),
+            "snippet": message.get("snippet", ""),
+            "body_text": "",
+            "body_html": "",
+            "attachments": [],
         }
-        
-        # Process parts to extract body and attachments
-        payload = message.get('payload', {})
-        if payload:
-            parts = payload.get('parts', [])
-            
-            # If no parts, the payload itself might be the content
-            if not parts and 'body' in payload:
-                self._process_part(payload, email_data)
-            else:
-                for part in parts:
+
+        # Process headers
+        if "payload" in message and "headers" in message["payload"]:
+            headers = message["payload"]["headers"]
+            for header in headers:
+                header_name = header.get("name", "").lower()
+                if header_name == "from":
+                    email_data["from"] = header.get("value", "")
+                elif header_name == "to":
+                    email_data["to"] = header.get("value", "")
+                elif header_name == "subject":
+                    email_data["subject"] = header.get("value", "")
+                elif header_name == "date":
+                    email_data["date"] = header.get("value", "")
+                elif header_name == "cc":
+                    email_data["cc"] = header.get("value", "")
+                elif header_name == "bcc":
+                    email_data["bcc"] = header.get("value", "")
+
+        # Process message body parts
+        if "payload" in message:
+            payload = message["payload"]
+            if "parts" in payload:
+                for part in payload["parts"]:
                     self._process_part(part, email_data)
-        
+            elif "body" in payload:
+                # Handle single-part message
+                mime_type = payload.get("mimeType", "")
+                if "text/plain" in mime_type:
+                    if "data" in payload["body"]:
+                        body_data = payload["body"]["data"]
+                        email_data["body_text"] = base64.urlsafe_b64decode(
+                            body_data
+                        ).decode("utf-8", errors="replace")
+                elif "text/html" in mime_type and "data" in payload["body"]:
+                    body_data = payload["body"]["data"]
+                    email_data["body_html"] = base64.urlsafe_b64decode(
+                        body_data
+                    ).decode("utf-8", errors="replace")
+
         return email_data
-    
-    def _process_part(self, part: Dict[str, Any], email_data: Dict[str, Any], part_id: str = '') -> None:
+
+    def _process_part(
+        self, part: dict[str, Any], email_data: dict[str, Any], part_id: str = ""
+    ) -> None:
         """
-        Process a MIME part from the email.
-        
+        Process a message part recursively.
+
         Args:
-            part: The MIME part to process
-            email_data: The email data dictionary to update
-            part_id: ID path for nested parts
+            part: Message part to process
+            email_data: Email data dictionary to update
+            part_id: Parent part ID for nested parts
         """
-        mime_type = part.get('mimeType', '')
-        
-        # For nested multipart messages
-        if mime_type.startswith('multipart/'):
-            nested_parts = part.get('parts', [])
-            for i, nested_part in enumerate(nested_parts):
-                new_part_id = f"{part_id}.{i+1}" if part_id else f"{i+1}"
-                self._process_part(nested_part, email_data, new_part_id)
-            return
-        
-        # Get part body
-        body = part.get('body', {})
-        
-        # Handle attachments
-        filename = part.get('filename', '')
-        if filename and 'attachmentId' in body:
-            email_data['attachments'].append({
-                'id': body.get('attachmentId', ''),
-                'filename': filename,
-                'mime_type': mime_type,
-                'size': body.get('size', 0),
-                'part_id': part_id
-            })
-            return
-            
-        # Handle text content
-        if 'data' in body:
-            content = base64.urlsafe_b64decode(body['data']).decode('utf-8', errors='replace')
-            
-            if mime_type == 'text/plain':
-                email_data['body_text'] = content
-            elif mime_type == 'text/html':
-                email_data['body_html'] = content
-                
-    def get_emails_with_labels(self, label_ids: List[str] = None, query: str = '', max_results: int = 100) -> List[Dict[str, Any]]:
+        current_part_id = part.get("partId", "")
+        if part_id:
+            current_part_id = f"{part_id}.{current_part_id}"
+
+        mime_type = part.get("mimeType", "")
+
+        # Handle nested parts
+        if "parts" in part:
+            for sub_part in part["parts"]:
+                self._process_part(sub_part, email_data, current_part_id)
+
+        # Handle attachment
+        elif "attachment" in part.get("body", {}) and part.get("filename"):
+            attachment_info = {
+                "id": part.get("body", {}).get("attachmentId", ""),
+                "filename": part.get("filename", ""),
+                "mime_type": mime_type,
+                "size": part.get("body", {}).get("size", 0),
+                "part_id": current_part_id,
+            }
+            email_data["attachments"].append(attachment_info)
+
+        # Handle text body
+        elif "body" in part and "data" in part["body"]:
+            body_data = part["body"]["data"]
+            decoded_data = base64.urlsafe_b64decode(body_data).decode(
+                "utf-8", errors="replace"
+            )
+
+            if "text/plain" in mime_type:
+                email_data["body_text"] = decoded_data
+            elif "text/html" in mime_type:
+                email_data["body_html"] = decoded_data
+
+    def get_emails_with_labels(
+        self,
+        label_ids: list[str] | None = None,
+        query: str = "",
+        max_results: int = 100,
+    ) -> list[dict[str, Any]]:
         """
         Get emails with specific labels or matching a query.
-        
+
         Args:
             label_ids: List of label IDs to filter by
             query: Additional search query
-            max_results: Maximum number of emails to return
-            
+            max_results: Maximum number of results
+
         Returns:
-            List of email data dictionaries
+            List of email messages
         """
-        query_parts = []
-        
-        # Add label filters
+        # Build query string with labels if provided
         if label_ids:
-            for label_id in label_ids:
-                query_parts.append(f"label:{label_id}")
-                
-        # Add custom query if provided
-        if query:
-            query_parts.append(f"({query})")
-            
-        # Combine query parts
-        final_query = " ".join(query_parts)
-        
-        emails = []
-        count = 0
-        
-        # Get emails in batches
-        for batch in self.get_email_batches(final_query, batch_size=settings.MAX_EMAILS_PER_BATCH):
-            for message_meta in batch:
-                if count >= max_results:
-                    break
-                    
-                message_id = message_meta.get('id')
-                message = self.get_email_content(message_id)
-                
-                if message:
-                    email_data = self.parse_email_content(message)
-                    emails.append(email_data)
-                    count += 1
-                    
-            if count >= max_results:
-                break
-                
-        return emails 
+            label_query = " ".join([f"label:{label_id}" for label_id in label_ids])
+            query = f"{label_query} {query}" if query else label_query
+
+        # Get emails matching the query
+        result = self.get_email_list(query=query, max_results=max_results)
+        messages = result.get("messages", [])
+
+        # Fetch full content for each message
+        full_messages = []
+        for message in messages:
+            message_id = message.get("id")
+            if message_id:
+                full_message = self.get_email_content(message_id)
+                full_messages.append(full_message)
+
+        return full_messages

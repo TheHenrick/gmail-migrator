@@ -1,3 +1,1 @@
-"""
-API module for the Gmail Migrator application.
-""" 
+"""API module for the Gmail Migrator application."""

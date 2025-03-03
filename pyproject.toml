@@ -15,20 +15,149 @@ google-auth-httplib2 = "^0.1.0"
 google-auth-oauthlib = "^1.0.0"
 python-dotenv = "^1.0.0"
 requests = "^2.31.0"
-flask = "^3.1.0"
-flask-cors = "^5.0.1"
+fastapi = "^0.110.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
 jinja2 = "^3.1.2"
-itsdangerous = "^2.1.2"
+aiohttp = "^3.9.0"
+requests-oauthlib = "^1.3.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
+ruff = "^0.5.0"
+mypy = "^1.8.0"
+pytest-cov = "^4.1.0"
+pre-commit = "^3.6.2"
+types-requests = "^2.31.0"
+httpx = "^0.27.0"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.poetry.scripts]
+format = "scripts.run:format_code"
+lint = "scripts.run:lint"
+typecheck = "scripts.run:typecheck"
+checks = "scripts.run:all_checks"
+test = "scripts.run:run_tests"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "I",   # isort
+    "D",   # pydocstyle
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "ANN", # flake8-annotations
+    "S",   # flake8-bandit
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "T10", # flake8-debugger
+    "EM",  # flake8-errmsg
+    "FA",  # flake8-future-annotations
+    "ISC", # flake8-implicit-str-concat
+    "PT",  # flake8-pytest-style
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "ERA", # eradicate
+    "PL",  # pylint
+    "TRY", # tryceratops
+]
+ignore = [
+    "D203", # one-blank-line-before-class
+    "D212", # multi-line-summary-first-line
+    "ANN101", # missing-type-self
+    "ANN102", # missing-type-cls
+    "COM812", # missing trailing comma
+    "ISC001", # implicit-str-concat
+    "TRY300", # Consider moving this statement to an `else` block (often too strict)
+    "S105",   # Potential hardcoded passwords (creates too many false positives)
+    "PLR2004", # Magic value used in comparison (too strict for this codebase)
+    "S603",   # `subprocess` call for run_command in scripts (known to be safe)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "D",      # No docstring requirements in tests
+    "ANN",    # No strict type annotations in tests
+    "S101",   # Allow assert in tests
+    "S105",   # Allow hardcoded test credentials
+    "S106",   # Allow hardcoded passwords in arguments for tests
+    "PLR2004", # Allow magic numbers in tests
+    "RET504",  # Allow redundant variable assignments in tests
+    "ARG001",  # Allow unused function arguments in tests (fixtures)
+    "PTH103",  # Allow os.makedirs
+    "PTH107",  # Allow os.remove
+    "PTH110",  # Allow os.path.exists
+    "PTH120",  # Allow os.path.dirname
+    "PTH123",  # Allow open() instead of Path.open()
+    "E501",    # Allow long lines in tests
+]
+"scripts/**/*.py" = [
+    "D",      # Less strict docstring requirements in scripts
+    "ANN",    # Less strict type annotation requirements in scripts
+    "S603",   # Allow subprocess calls in scripts
+    "TRY300", # Allow non-else returns in scripts
+    "RET505", # Allow unnecessary else after return
+]
+"app/services/gmail/auth.py" = [
+    "S105",   # Allow OAuth URLs that look like hardcoded passwords
+]
+"app/utils/rate_limiter.py" = [
+    "ANN401", # Allow Any in rate limiter due to wrapper function requirements
+]
+"app/services/gmail/labels.py" = [
+    "PLR0912", # Allow complex function with many branches (nested labels function)
+]
+"app/services/gmail/client.py" = [
+    "PLR0912", # Allow complex function with many branches (parse_email_content)
+]
+"wsgi.py" = [
+    "S104",   # Allow binding to all interfaces in debug mode
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
+addopts = "--cov=app --cov-report=term --cov-report=html"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

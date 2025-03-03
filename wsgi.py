@@ -1,9 +1,15 @@
-"""
-WSGI entry point for the Gmail Migrator application.
-"""
-from app.app import create_app
+"""WSGI entry point for the application."""
 
-app = create_app()
+import uvicorn
+
+from app.config import settings
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True) 
+    """Run the FastAPI application using uvicorn."""
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0" if settings.DEBUG else "127.0.0.1",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower(),
+    )

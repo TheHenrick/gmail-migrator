@@ -1,82 +1,104 @@
-"""
-Rate limiting utility for API calls.
-"""
-import time
+"""Rate limiting utilities for API calls."""
+
 import logging
+import time
+from collections import deque
+from collections.abc import Callable
 from functools import wraps
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
+# Type variable for generic functions
+T = TypeVar("T")
+
+# Constants for rate limiting
+MAX_REQUEST_WAIT_TIME = 60  # Maximum time to wait for rate limiting in seconds
+BASE_TIME_WINDOW = 60.0  # Base time window in seconds (1 minute)
+
 
 class RateLimiter:
-    """
-    A rate limiter to control the frequency of API calls.
-    """
-    
-    def __init__(self, max_calls: int, period: float = 60.0):
+    """A rate limiter to control the frequency of API calls."""
+
+    def __init__(self, max_calls: int, period: float = BASE_TIME_WINDOW) -> None:
         """
         Initialize the rate limiter.
-        
+
         Args:
-            max_calls: Maximum number of calls allowed in the period
+            max_calls: Maximum number of calls allowed in the time period
             period: Time period in seconds (default: 60 seconds)
         """
         self.max_calls = max_calls
         self.period = period
-        self.interval = period / max_calls
-        self.last_call_time = 0
-        self.call_count = 0
-        self.window_start_time = time.time()
-    
-    def wait(self):
+        self.calls = deque()  # Tracks timestamp of calls
+
+    def _cleanup_old_calls(self, current_time: float) -> None:
         """
-        Wait if necessary to comply with the rate limit.
+        Remove calls that are outside the current time window.
+
+        Args:
+            current_time: Current timestamp
         """
+        # Time window start
+        window_start = current_time - self.period
+
+        # Remove calls outside the window
+        while self.calls and self.calls[0] < window_start:
+            self.calls.popleft()
+
+    def wait(self) -> None:
+        """Wait if necessary to comply with the rate limit."""
         current_time = time.time()
-        
-        # Check if we're in a new window
-        if current_time - self.window_start_time > self.period:
-            self.window_start_time = current_time
-            self.call_count = 0
-        
-        # If we've made max calls in this window, wait until next window
-        if self.call_count >= self.max_calls:
-            sleep_time = self.window_start_time + self.period - current_time
-            if sleep_time > 0:
-                logger.debug(f"Rate limit reached: Sleeping for {sleep_time:.2f} seconds")
-                time.sleep(sleep_time)
-                self.window_start_time = time.time()
-                self.call_count = 0
-        
-        # Wait based on interval between calls
-        time_since_last_call = current_time - self.last_call_time
-        if time_since_last_call < self.interval:
-            sleep_time = self.interval - time_since_last_call
-            logger.debug(f"Rate limiting: Sleeping for {sleep_time:.2f} seconds")
-            time.sleep(sleep_time)
-        
-        self.last_call_time = time.time()
-        self.call_count += 1
+
+        # Clean up old calls
+        self._cleanup_old_calls(current_time)
+
+        # Check if we've reached the limit
+        if len(self.calls) >= self.max_calls:
+            # Calculate how long to wait
+            oldest_call = self.calls[0]
+            wait_time = oldest_call + self.period - current_time
+
+            if wait_time > 0:
+                # Don't wait more than the maximum wait time
+                actual_wait = min(wait_time, MAX_REQUEST_WAIT_TIME)
+                time.sleep(actual_wait)
+                current_time = time.time()  # Update time after sleep
+
+                # Clean up old calls again after waiting
+                self._cleanup_old_calls(current_time)
+
+        # Add current call
+        self.calls.append(current_time)
 
 
-def rate_limited(max_calls: int, period: float = 60.0):
+# Type for function that takes any arguments and returns type T
+FuncT = Callable[..., T]
+# Type for decorated function that takes any arguments and returns type T
+DecoratedFuncT = Callable[..., T]
+
+
+def rate_limited(
+    max_calls: int, period: float = BASE_TIME_WINDOW
+) -> Callable[[FuncT], DecoratedFuncT]:
     """
     Decorator for rate-limiting function calls.
-    
+
     Args:
-        max_calls: Maximum number of calls allowed in the period
+        max_calls: Maximum number of calls allowed in the time period
         period: Time period in seconds (default: 60 seconds)
-        
+
     Returns:
-        Decorated function with rate limiting
+        Decorator function that applies rate limiting
     """
     limiter = RateLimiter(max_calls, period)
-    
-    def decorator(func):
+
+    def decorator(func: FuncT) -> DecoratedFuncT:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> T:
             limiter.wait()
             return func(*args, **kwargs)
+
         return wrapper
-    
-    return decorator 
+
+    return decorator

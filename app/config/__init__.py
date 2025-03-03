@@ -1,3 +1,1 @@
-"""
-Configuration module for the Gmail Migrator application.
-""" 
+"""Configuration module for the Gmail Migrator application."""

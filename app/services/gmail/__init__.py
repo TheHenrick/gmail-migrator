@@ -1,3 +1,1 @@
-"""
-Gmail service module for interacting with Gmail API.
-""" 
+"""Gmail service module for interacting with Gmail API."""
