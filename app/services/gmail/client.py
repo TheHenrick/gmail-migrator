@@ -32,14 +32,18 @@ REQUEST_INTERVAL = 60.0 / MAX_REQUESTS_PER_MINUTE  # seconds between requests
 class GmailClient:
     """Client for interfacing with the Gmail API."""
 
-    def __init__(self, credentials: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, credentials: dict[str, Any] | None = None, credentials_path: str = None
+    ) -> None:
         """
         Initialize the Gmail client.
 
         Args:
             credentials: OAuth credentials for Gmail API access
+            credentials_path: Path to credentials file
         """
         self.credentials = credentials
+        self.credentials_path = credentials_path or "credentials.json"
         self.service = None
         self.request_count = 0
         self.requests_per_minute = settings.RATE_LIMIT_REQUESTS
@@ -52,25 +56,33 @@ class GmailClient:
         Returns:
             Dictionary containing OAuth credentials
         """
-        # Create a flow instance with client secrets
-        flow = InstalledAppFlow.from_client_secrets_file(
-            "credentials.json", GMAIL_SCOPES
-        )
+        try:
+            # For testing, we might already have credentials
+            if self.credentials:
+                return self.credentials
 
-        # Run the OAuth flow
-        credentials = flow.run_local_server(port=0)
+            # Create a flow instance with client secrets
+            flow = InstalledAppFlow.from_client_secrets_file(
+                self.credentials_path, GMAIL_SCOPES
+            )
 
-        # Store credentials
-        self.credentials = {
-            "token": credentials.token,
-            "refresh_token": credentials.refresh_token,
-            "token_uri": credentials.token_uri,
-            "client_id": credentials.client_id,
-            "client_secret": credentials.client_secret,
-            "scopes": credentials.scopes,
-        }
+            # Run the OAuth flow
+            credentials = flow.run_local_server(port=0)
 
-        return self.credentials
+            # Store credentials
+            self.credentials = {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes,
+            }
+
+            return self.credentials
+        except Exception:
+            logger.exception("Authentication error")
+            raise
 
     def _build_service(self) -> None:
         """Build the Gmail API service."""
@@ -204,7 +216,7 @@ class GmailClient:
             result = (
                 self.service.users()
                 .messages()
-                .get(userId="me", id=message_id, format="full")
+                .get(userId="me", id=message_id)
                 .execute()
             )
 
@@ -265,8 +277,7 @@ class GmailClient:
             "thread_id": message.get("threadId", ""),
             "label_ids": message.get("labelIds", []),
             "snippet": message.get("snippet", ""),
-            "body_text": "",
-            "body_html": "",
+            "body": {"plain": "", "html": ""},
             "attachments": [],
         }
 
@@ -297,64 +308,66 @@ class GmailClient:
             elif "body" in payload:
                 # Handle single-part message
                 mime_type = payload.get("mimeType", "")
-                if "text/plain" in mime_type:
-                    if "data" in payload["body"]:
-                        body_data = payload["body"]["data"]
-                        email_data["body_text"] = base64.urlsafe_b64decode(
-                            body_data
-                        ).decode("utf-8", errors="replace")
+                if "data" in payload["body"]:
+                    body_data = payload["body"]["data"]
+                    decoded_text = base64.urlsafe_b64decode(body_data).decode(
+                        "utf-8", errors="replace"
+                    )
+                    email_data["body"]["plain"] = decoded_text
                 elif "text/html" in mime_type and "data" in payload["body"]:
                     body_data = payload["body"]["data"]
-                    email_data["body_html"] = base64.urlsafe_b64decode(
-                        body_data
-                    ).decode("utf-8", errors="replace")
+                    decoded_html = base64.urlsafe_b64decode(body_data).decode(
+                        "utf-8", errors="replace"
+                    )
+                    email_data["body"]["html"] = decoded_html
 
         return email_data
 
-    def _process_part(
-        self, part: dict[str, Any], email_data: dict[str, Any], part_id: str = ""
-    ) -> None:
+    def _process_part(self, part: dict[str, Any], email_data: dict[str, Any]) -> None:
         """
         Process a message part recursively.
 
         Args:
-            part: Message part to process
-            email_data: Email data dictionary to update
-            part_id: Parent part ID for nested parts
+            part: The part to process
+            email_data: The email data dictionary to update
         """
-        current_part_id = part.get("partId", "")
-        if part_id:
-            current_part_id = f"{part_id}.{current_part_id}"
-
-        mime_type = part.get("mimeType", "")
-
         # Handle nested parts
         if "parts" in part:
-            for sub_part in part["parts"]:
-                self._process_part(sub_part, email_data, current_part_id)
+            for p in part["parts"]:
+                self._process_part(p, email_data)
+            return
 
-        # Handle attachment
-        elif "attachment" in part.get("body", {}) and part.get("filename"):
-            attachment_info = {
-                "id": part.get("body", {}).get("attachmentId", ""),
-                "filename": part.get("filename", ""),
-                "mime_type": mime_type,
-                "size": part.get("body", {}).get("size", 0),
-                "part_id": current_part_id,
-            }
-            email_data["attachments"].append(attachment_info)
+        # Get mimetype and body
+        mime_type = part.get("mimeType", "")
+        body = part.get("body", {})
 
-        # Handle text body
-        elif "body" in part and "data" in part["body"]:
-            body_data = part["body"]["data"]
-            decoded_data = base64.urlsafe_b64decode(body_data).decode(
-                "utf-8", errors="replace"
+        # Handle attachments
+        if "attachmentId" in body:
+            email_data["attachments"].append(
+                {
+                    "id": body["attachmentId"],
+                    "filename": part.get("filename", ""),
+                    "mimeType": mime_type,
+                }
             )
+        # Handle text bodies
+        elif "data" in body:
+            data = body["data"]
 
-            if "text/plain" in mime_type:
-                email_data["body_text"] = decoded_data
-            elif "text/html" in mime_type:
-                email_data["body_html"] = decoded_data
+            # Convert from urlsafe base64 to standard base64
+            data = data.replace("-", "+").replace("_", "/")
+
+            # Add padding if needed
+            missing_padding = len(data) % 4
+            if missing_padding:
+                data += "=" * (4 - missing_padding)
+
+            decoded_data = base64.b64decode(data).decode("utf-8")
+
+            if mime_type == "text/plain":
+                email_data["body"]["plain"] = decoded_data
+            elif mime_type == "text/html":
+                email_data["body"]["html"] = decoded_data
 
     def get_emails_with_labels(
         self,
