@@ -1,8 +1,8 @@
-version: '3.8'
-
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: gmail-migrator
     ports:
       - "8000:8000"
@@ -21,3 +21,9 @@ services:
       - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET}
       - YAHOO_REDIRECT_URI=${YAHOO_REDIRECT_URI}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
