@@ -15,6 +15,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Cache the jq tool
+      - name: Cache jq
+        id: cache-jq
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/bin/jq
+          key: ${{ runner.os }}-jq-1.6
+
+      # Install jq if not cached
+      - name: Install jq
+        if: steps.cache-jq.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Check for unsigned commits
         run: |
           # Define the cutoff commit after which signatures are required
