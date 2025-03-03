@@ -8,27 +8,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const connectDestinationBtn = document.getElementById('connectDestination');
     const startMigrationBtn = document.getElementById('startMigration');
     const accountOptions = document.querySelectorAll('.account-option');
-    
+
     // State
     let isGmailConnected = false;
     let isDestinationConnected = false;
     let selectedDestination = null;
-    
+
     // Connect Gmail button
     connectGmailBtn.addEventListener('click', async () => {
         try {
             // In a real app, this would redirect to OAuth flow
             console.log('Connecting to Gmail...');
             connectGmailBtn.textContent = 'Connecting...';
-            
+
             // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
+
             // Update UI to show connected state
             connectGmailBtn.textContent = 'Connected to Gmail';
             connectGmailBtn.classList.remove('primary');
             connectGmailBtn.classList.add('secondary');
-            
+
             isGmailConnected = true;
             updateUI();
         } catch (error) {
@@ -36,11 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
             connectGmailBtn.textContent = 'Connect Gmail';
         }
     });
-    
+
     // Destination account selection
     accountOptions.forEach(option => {
         if (option.closest('.source-section')) return; // Skip source options
-        
+
         option.addEventListener('click', () => {
             // Remove selection from all options
             accountOptions.forEach(opt => {
@@ -48,39 +48,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     opt.classList.remove('selected');
                 }
             });
-            
+
             // Add selection to clicked option
             option.classList.add('selected');
-            
+
             // Get the selected service
             const serviceName = option.querySelector('span').textContent;
             selectedDestination = serviceName;
-            
+
             // Update UI
             connectDestinationBtn.textContent = `Connect ${serviceName}`;
             connectDestinationBtn.disabled = false;
-            
+
             updateUI();
         });
     });
-    
+
     // Connect destination button
     connectDestinationBtn.addEventListener('click', async () => {
         if (!selectedDestination) return;
-        
+
         try {
             // In a real app, this would redirect to OAuth flow
             console.log(`Connecting to ${selectedDestination}...`);
             connectDestinationBtn.textContent = 'Connecting...';
-            
+
             // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
+
             // Update UI to show connected state
             connectDestinationBtn.textContent = `Connected to ${selectedDestination}`;
             connectDestinationBtn.classList.remove('primary');
             connectDestinationBtn.classList.add('secondary');
-            
+
             isDestinationConnected = true;
             updateUI();
         } catch (error) {
@@ -88,11 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
             connectDestinationBtn.textContent = `Connect ${selectedDestination}`;
         }
     });
-    
+
     // Start migration button
     startMigrationBtn.addEventListener('click', async () => {
         if (!isGmailConnected || !isDestinationConnected) return;
-        
+
         try {
             // Collect migration options
             const options = {
@@ -102,11 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 startDate: document.getElementById('startDate').value || null,
                 endDate: document.getElementById('endDate').value || null
             };
-            
+
             console.log('Starting migration with options:', options);
             startMigrationBtn.textContent = 'Migration in progress...';
             startMigrationBtn.disabled = true;
-            
+
             // In a real app, this would call the API to start migration
             // For now, we'll just simulate progress
             simulateMigrationProgress();
@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startMigrationBtn.disabled = false;
         }
     });
-    
+
     // Update UI based on current state
     function updateUI() {
         if (isGmailConnected && isDestinationConnected) {
@@ -125,12 +125,12 @@ document.addEventListener('DOMContentLoaded', () => {
             startMigrationBtn.disabled = true;
         }
     }
-    
+
     // Simulate migration progress (for demo purposes)
     async function simulateMigrationProgress() {
         // In a real app, this would be replaced with actual API calls
         // to check migration progress
-        
+
         // Create a progress element
         const main = document.querySelector('main');
         const progressSection = document.createElement('section');
@@ -143,36 +143,36 @@ document.addEventListener('DOMContentLoaded', () => {
             <p class="progress-text">0% complete</p>
             <p class="migration-stats">Emails processed: 0</p>
         `;
-        
+
         main.appendChild(progressSection);
-        
+
         const progressBar = progressSection.querySelector('.progress-bar');
         const progressText = progressSection.querySelector('.progress-text');
         const migrationStats = progressSection.querySelector('.migration-stats');
-        
+
         // Simulate progress
         let progress = 0;
         let emailCount = 0;
-        
+
         const interval = setInterval(() => {
             progress += Math.random() * 5;
             emailCount = Math.floor(progress * 8);
-            
+
             if (progress >= 100) {
                 progress = 100;
                 clearInterval(interval);
                 startMigrationBtn.textContent = 'Migration Complete';
-                
+
                 // Add a success message
                 const successMessage = document.createElement('p');
                 successMessage.className = 'success-message';
                 successMessage.textContent = 'Migration completed successfully!';
                 progressSection.appendChild(successMessage);
             }
-            
+
             progressBar.style.width = `${progress}%`;
             progressText.textContent = `${Math.floor(progress)}% complete`;
             migrationStats.textContent = `Emails processed: ${emailCount}`;
         }, 500);
     }
-}); 
+});

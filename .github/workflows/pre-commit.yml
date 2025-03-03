@@ -25,15 +25,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip' # Enable built-in pip caching
 
-      - name: Install pre-commit
-        run: pip install pre-commit
+      # Cache pip dependencies
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-precommit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-precommit-
+            ${{ runner.os }}-pip-
 
+      # Improved pre-commit hook caching
       - name: Cache pre-commit hooks
         uses: actions/cache@v3
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      # Install with specific version for better cache stability
+      - name: Install pre-commit
+        run: pip install pre-commit==3.6.2
 
       - name: Run pre-commit hooks
         run: pre-commit run --all-files
