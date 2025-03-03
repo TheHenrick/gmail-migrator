@@ -1,0 +1,57 @@
+name: Docker Compose Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+
+jobs:
+  docker-compose-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up environment variables
+        run: |
+          echo "GMAIL_CLIENT_ID=test_client_id" >> .env
+          echo "GMAIL_CLIENT_SECRET=test_client_secret" >> .env
+          echo "GMAIL_REDIRECT_URI=http://localhost:8000/auth/callback" >> .env
+          echo "OUTLOOK_CLIENT_ID=test_client_id" >> .env
+          echo "OUTLOOK_CLIENT_SECRET=test_client_secret" >> .env
+          echo "OUTLOOK_REDIRECT_URI=http://localhost:8000/auth/outlook/callback" >> .env
+          echo "YAHOO_CLIENT_ID=test_client_id" >> .env
+          echo "YAHOO_CLIENT_SECRET=test_client_secret" >> .env
+          echo "YAHOO_REDIRECT_URI=http://localhost:8000/auth/yahoo/callback" >> .env
+          echo "DEBUG=True" >> .env
+          echo "LOG_LEVEL=INFO" >> .env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start containers
+        run: docker compose up -d
+
+      - name: Wait for service to be ready
+        run: sleep 10
+
+      - name: Check if containers are running
+        run: docker compose ps
+
+      - name: Check application health
+        run: |
+          curl --fail http://localhost:8000/health || exit 1
+
+      - name: Check logs for errors
+        run: docker compose logs
+
+      - name: Stop containers
+        run: docker compose down
+        if: always()

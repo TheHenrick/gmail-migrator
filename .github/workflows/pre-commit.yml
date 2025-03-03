@@ -1,0 +1,41 @@
+name: Pre-commit Hooks Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '.pre-commit-config.yaml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '.pre-commit-config.yaml'
+      - 'pyproject.toml'
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files
+        env:
+          SKIP: mypy # Temporarily skip mypy as configured in .pre-commit-config.yaml

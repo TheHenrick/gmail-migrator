@@ -1,5 +1,9 @@
 # Gmail Migrator
 
+[![CI](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml)
+[![Pre-commit](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml)
+[![Docker Compose Test](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml)
+
 A tool to help users migrate their Gmail emails to other email service providers like Outlook, Yahoo Mail, and others.
 
 ## Features (Planned)
@@ -75,4 +79,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+Contributions are welcome! Please feel free to submit a Pull Request.
