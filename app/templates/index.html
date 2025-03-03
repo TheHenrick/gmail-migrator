@@ -23,7 +23,7 @@
                     <h3>Source Account</h3>
                     <div class="account-selector">
                         <div class="account-option selected">
-                            <img src="{{ url_for('static', path='/img/gmail.png') }}" alt="Gmail" class="service-icon">
+                            <img src="{{ url_for('static', path='/img/gmail.svg') }}" alt="Gmail" class="service-icon">
                             <span>Gmail</span>
                         </div>
                     </div>
@@ -34,12 +34,12 @@
                 <div class="destination-section">
                     <h3>Destination Account</h3>
                     <div class="account-selector">
-                        <div class="account-option">
-                            <img src="{{ url_for('static', path='/img/outlook.png') }}" alt="Outlook" class="service-icon">
+                        <div class="account-option" data-provider="outlook">
+                            <img src="{{ url_for('static', path='/img/outlook.svg') }}" alt="Outlook" class="service-icon">
                             <span>Outlook</span>
                         </div>
-                        <div class="account-option">
-                            <img src="{{ url_for('static', path='/img/yahoo.png') }}" alt="Yahoo Mail" class="service-icon">
+                        <div class="account-option" data-provider="yahoo">
+                            <img src="{{ url_for('static', path='/img/yahoo.svg') }}" alt="Yahoo Mail" class="service-icon">
                             <span>Yahoo Mail</span>
                         </div>
                     </div>
@@ -97,13 +97,78 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="option-item">
+                    <label class="toggle">
+                        <input type="checkbox" id="batchProcessing" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="option-text">
+                        <h4>Batch Processing</h4>
+                        <p>Process emails in batches for improved performance</p>
+                    </div>
+                </div>
+
+                <div id="batchSizeContainer">
+                    <h4>Batch Size</h4>
+                    <div class="slider-container">
+                        <input type="range" min="10" max="100" value="50" step="10" id="batchSizeSlider">
+                        <div class="slider-value" id="batchSizeValue">50 emails</div>
+                    </div>
+                </div>
             </section>
 
             <button class="button primary start-button" id="startMigration" disabled>Start Migration</button>
+
+            <!-- Migration Status Section (Hidden by default) -->
+            <section class="migration-status" id="migrationStatus">
+                <h2>
+                    Migration in Progress
+                    <span class="spinner"></span>
+                </h2>
+
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="progressBarFill"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <span id="processedCount">0/0 emails processed</span>
+                        <span id="progressPercentage">0%</span>
+                    </div>
+                </div>
+
+                <div class="migration-details">
+                    <div class="migration-summary">
+                        <div class="summary-card success">
+                            <h3>Successfully Migrated</h3>
+                            <div class="number" id="successCount">0</div>
+                        </div>
+                        <div class="summary-card pending">
+                            <h3>Pending</h3>
+                            <div class="number" id="pendingCount">0</div>
+                        </div>
+                        <div class="summary-card failed">
+                            <h3>Failed</h3>
+                            <div class="number" id="failedCount">0</div>
+                        </div>
+                    </div>
+
+                    <h3>Migration Log</h3>
+                    <div class="migration-log" id="migrationLog">
+                        <!-- Log entries will be added here dynamically -->
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="button primary" id="pauseResumeMigration">Pause Migration</button>
+                    <button class="button danger" id="cancelMigration">Cancel Migration</button>
+                    <button class="button success" id="downloadReport" disabled>Download Report</button>
+                </div>
+            </section>
         </main>
 
         <footer>
-            <p>© 2023 Gmail Migrator. All rights reserved.</p>
+            <p>© 2024 Gmail Migrator. All rights reserved.</p>
         </footer>
     </div>
 
