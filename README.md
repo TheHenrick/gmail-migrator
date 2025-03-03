@@ -9,13 +9,42 @@ A tool to help users migrate their Gmail emails to other email service providers
 
 ## Features (Planned)
 
-- Connect to Gmail using OAuth2
-- Fetch emails from Gmail with filtering options
-- Connect to destination email services
-- Migrate emails with attachments
-- Preserve folder structure and labels
-- Migration progress tracking and reporting
-- Error handling and retry mechanisms
+- **Authentication & Connection**
+  - Connect to Gmail using OAuth2
+  - Connect to Outlook using Microsoft Graph API
+  - Connect to Yahoo Mail using OAuth2
+  - Secure credential management with token refresh
+
+- **Email Retrieval & Processing**
+  - Fetch emails from Gmail with advanced filtering options
+  - Support for date ranges, labels, and search queries
+  - Process email content while maintaining formatting
+  - Handle email threads and conversations
+
+- **Email Migration**
+  - Migrate emails to Outlook, Yahoo, and other providers
+  - Support for batch processing of large email volumes
+  - Transfer emails with attachments and embedded images
+  - Preserve email metadata (dates, read/unread status)
+  - Maintain folder structures and label hierarchies
+
+- **User Interface**
+  - Modern, responsive web interface following Apple HIG principles
+  - Real-time progress reporting during migration
+  - User-friendly OAuth connection workflow
+  - Detailed migration statistics and reporting
+
+- **Reliability & Performance**
+  - Parallel processing for faster migrations
+  - Automatic retries for failed transfers
+  - Resumable migrations after interruption
+  - Rate limiting to prevent API throttling
+
+- **Security**
+  - End-to-end encryption for data in transit
+  - No permanent storage of email content
+  - Temporary caching with secure deletion
+  - OAuth token management with proper scoping
 
 ## Getting Started
 
