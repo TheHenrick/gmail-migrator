@@ -32,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-precommit-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: ${{ runner.os }}-pip-precommit-${{ hashFiles('poetry.lock') }}
           restore-keys: |
             ${{ runner.os }}-pip-precommit-
             ${{ runner.os }}-pip-
@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('**/.pre-commit-config.yaml', '**/poetry.lock') }}
           restore-keys: |
             pre-commit-${{ runner.os }}-
 

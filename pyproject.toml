@@ -74,8 +74,6 @@ extend-select = [
 ignore = [
     "D203", # one-blank-line-before-class
     "D212", # multi-line-summary-first-line
-    "ANN101", # missing-type-self
-    "ANN102", # missing-type-cls
     "COM812", # missing trailing comma
     "ISC001", # implicit-str-concat
     "TRY300", # Consider moving this statement to an `else` block (often too strict)
