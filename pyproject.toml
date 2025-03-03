@@ -5,7 +5,7 @@ description = "A tool to help users migrate emails from Gmail to other email ser
 authors = ["henrick <self@thehenrick.com>"]
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/yourusername/gmail-migrator"
+repository = "https://github.com/TheHenrick/gmail-migrator"
 packages = [{include = "app"}]
 
 [tool.poetry.dependencies]

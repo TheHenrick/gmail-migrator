@@ -1,9 +1,9 @@
 # Gmail Migrator
 
-[![CI](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/ci.yml)
-[![Pre-commit](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/pre-commit.yml)
-[![Docker Compose Test](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/docker-compose-test.yml)
-[![Signed Commits](https://github.com/yourusername/gmail-migrator/actions/workflows/verify-commit-signature.yml/badge.svg)](https://github.com/yourusername/gmail-migrator/actions/workflows/verify-commit-signature.yml)
+[![CI](https://github.com/TheHenrick/gmail-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/ci.yml)
+[![Pre-commit](https://github.com/TheHenrick/gmail-migrator/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/pre-commit.yml)
+[![Docker Compose Test](https://github.com/TheHenrick/gmail-migrator/actions/workflows/docker-compose-test.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/docker-compose-test.yml)
+[![Signed Commits](https://github.com/TheHenrick/gmail-migrator/actions/workflows/verify-commit-signature.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/verify-commit-signature.yml)
 
 A tool to help users migrate their Gmail emails to other email service providers like Outlook, Yahoo Mail, and others.
 
@@ -29,7 +29,7 @@ A tool to help users migrate their Gmail emails to other email service providers
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/gmail-migrator.git
+   git clone https://github.com/TheHenrick/gmail-migrator.git
    cd gmail-migrator
    ```
 
