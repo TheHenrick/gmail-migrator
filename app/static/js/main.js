@@ -66,32 +66,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Connect Gmail button
     connectGmailBtn.addEventListener('click', async () => {
         try {
-            // In a real implementation, this would redirect to OAuth flow
-            // For now, we'll simulate the API call
-            logToConsole('Initiating Gmail OAuth flow...');
-            connectGmailBtn.textContent = 'Connecting...';
-            connectGmailBtn.disabled = true;
+            // Redirect to the backend endpoint to start OAuth flow
+            const response = await fetch('/gmail/auth-url');
+            const data = await response.json();
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Store the state for CSRF protection
+            localStorage.setItem('gmailOAuthState', data.state);
 
-            // For demo purposes, we'll use a mock access token
-            const mockToken = 'mock_gmail_token_' + Date.now();
-            localStorage.setItem('gmailToken', mockToken);
-
-            // Update UI to show connected state
-            connectGmailBtn.textContent = 'Connected to Gmail';
-            connectGmailBtn.classList.remove('primary');
-            connectGmailBtn.classList.add('secondary');
-            connectGmailBtn.disabled = false;
-
-            isGmailConnected = true;
-            logToConsole('Successfully connected to Gmail', 'success');
-            updateUI();
+            // Redirect to Google's authorization page
+            window.location.href = data.auth_url;
         } catch (error) {
             logToConsole(`Error connecting to Gmail: ${error.message}`, 'error');
-            connectGmailBtn.textContent = 'Connect Gmail';
-            connectGmailBtn.disabled = false;
         }
     });
 
@@ -132,22 +117,17 @@ document.addEventListener('DOMContentLoaded', () => {
             connectDestinationBtn.textContent = 'Connecting...';
             connectDestinationBtn.disabled = true;
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Make API call to get auth URL for selected destination
+            const response = await fetch(`/${selectedDestination}/auth-url`);
+            const data = await response.json();
 
-            // For demo purposes, we'll use a mock access token
-            const mockToken = `mock_${selectedDestination}_token_${Date.now()}`;
-            localStorage.setItem(`${selectedDestination}Token`, mockToken);
+            // Store the state for CSRF protection if provided
+            if (data.state) {
+                localStorage.setItem(`${selectedDestination}OAuthState`, data.state);
+            }
 
-            // Update UI to show connected state
-            connectDestinationBtn.textContent = `Connected to ${selectedDestination.charAt(0).toUpperCase() + selectedDestination.slice(1)}`;
-            connectDestinationBtn.classList.remove('primary');
-            connectDestinationBtn.classList.add('secondary');
-            connectDestinationBtn.disabled = false;
-
-            isDestinationConnected = true;
-            logToConsole(`Successfully connected to ${selectedDestination}`, 'success');
-            updateUI();
+            // Redirect to authorization page
+            window.location.href = data.auth_url;
         } catch (error) {
             logToConsole(`Error connecting to ${selectedDestination}: ${error.message}`, 'error');
             connectDestinationBtn.textContent = 'Connect Destination';
@@ -396,5 +376,160 @@ document.addEventListener('DOMContentLoaded', () => {
         if (migration.status === 'running') {
             simulateMigrationProgress();
         }
+    }
+
+    // Handle OAuth callback
+    function handleOAuthCallback() {
+        // Check if there are OAuth query parameters in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const provider = urlParams.get('provider') || getProviderFromPath();
+
+        if (code && provider) {
+            const storedState = localStorage.getItem(`${provider}OAuthState`);
+
+            // If state is provided, verify it matches stored state
+            if (state && storedState && state !== storedState) {
+                logToConsole('OAuth state mismatch. Please try again.', 'error');
+                return;
+            }
+
+            // Handle the OAuth callback for the specific provider
+            processOAuthCode(provider, code);
+
+            // Remove the query parameters from the URL
+            const url = new URL(window.location.href);
+            url.search = '';
+            window.history.replaceState({}, document.title, url);
+        }
+    }
+
+    // Get provider from URL path segment
+    function getProviderFromPath() {
+        const path = window.location.pathname;
+        if (path.includes('/gmail/')) return 'gmail';
+        if (path.includes('/outlook/')) return 'outlook';
+        if (path.includes('/yahoo/')) return 'yahoo';
+        return null;
+    }
+
+    // Process OAuth code for a specific provider
+    async function processOAuthCode(provider, code) {
+        try {
+            logToConsole(`Processing ${provider} authentication...`);
+
+            // Make request to exchange code for token
+            const response = await fetch(`/${provider}/auth-callback?code=${code}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Authentication failed');
+            }
+
+            // Store the token
+            localStorage.setItem(`${provider}Token`, data.access_token || data.token);
+
+            // Update UI
+            if (provider === 'gmail') {
+                isGmailConnected = true;
+                connectGmailBtn.textContent = 'Connected to Gmail';
+                connectGmailBtn.classList.remove('primary');
+                connectGmailBtn.classList.add('secondary');
+            } else {
+                isDestinationConnected = true;
+                selectedDestination = provider;
+                connectDestinationBtn.textContent = `Connected to ${provider.charAt(0).toUpperCase() + provider.slice(1)}`;
+                connectDestinationBtn.classList.remove('primary');
+                connectDestinationBtn.classList.add('secondary');
+            }
+
+            logToConsole(`Successfully connected to ${provider}`, 'success');
+            updateUI();
+        } catch (error) {
+            logToConsole(`Error authenticating with ${provider}: ${error.message}`, 'error');
+        }
+    }
+
+    // Check for OAuth callback when page loads
+    handleOAuthCallback();
+
+    // OAuth Settings Modal
+    const oauthSettingsBtn = document.getElementById('oauthSettingsBtn');
+    const oauthSettingsModal = document.getElementById('oauthSettingsModal');
+    const closeModalBtn = document.querySelector('.close-modal');
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const oauthForms = {
+        gmail: document.getElementById('gmailOAuthForm'),
+        outlook: document.getElementById('outlookOAuthForm'),
+        yahoo: document.getElementById('yahooOAuthForm')
+    };
+
+    // Open OAuth settings modal
+    oauthSettingsBtn.addEventListener('click', () => {
+        oauthSettingsModal.style.display = 'block';
+        // Load saved OAuth settings
+        loadOAuthSettings();
+    });
+
+    // Close OAuth settings modal
+    closeModalBtn.addEventListener('click', () => {
+        oauthSettingsModal.style.display = 'none';
+    });
+
+    // Close modal if clicked outside
+    window.addEventListener('click', (event) => {
+        if (event.target === oauthSettingsModal) {
+            oauthSettingsModal.style.display = 'none';
+        }
+    });
+
+    // Tab switching
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // Remove active class from all buttons and contents
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Add active class to current button and content
+            button.classList.add('active');
+            const tabName = button.getAttribute('data-tab');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        });
+    });
+
+    // Save OAuth settings
+    Object.keys(oauthForms).forEach(provider => {
+        oauthForms[provider].addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(oauthForms[provider]);
+            const settings = {
+                clientId: formData.get('clientId'),
+                clientSecret: formData.get('clientSecret'),
+                redirectUri: formData.get('redirectUri')
+            };
+
+            // Save to localStorage (encrypted in a real app)
+            localStorage.setItem(`${provider}OAuthConfig`, JSON.stringify(settings));
+
+            logToConsole(`${provider.charAt(0).toUpperCase() + provider.slice(1)} OAuth settings saved`, 'success');
+        });
+    });
+
+    // Load OAuth settings from storage
+    function loadOAuthSettings() {
+        Object.keys(oauthForms).forEach(provider => {
+            const savedSettings = localStorage.getItem(`${provider}OAuthConfig`);
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+
+                // Fill in the form
+                document.getElementById(`${provider}ClientId`).value = settings.clientId || '';
+                document.getElementById(`${provider}ClientSecret`).value = settings.clientSecret || '';
+                document.getElementById(`${provider}RedirectUri`).value = settings.redirectUri || '';
+            }
+        });
     }
 });

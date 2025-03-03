@@ -8,7 +8,8 @@ from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client, get_outlook_client
 from app.services.gmail.client import GmailClient
-from app.services.outlook.auth import oauth_flow
+from app.services.outlook.auth import OutlookAuthManager
+from app.services.outlook.auth import oauth_flow as outlook_oauth_flow
 from app.services.outlook.client import OutlookClient
 
 # Set up logging
@@ -51,6 +52,24 @@ class MessageResponse(BaseModel):
         from_attributes = True
 
 
+class EmailSchema(BaseModel):
+    """Schema for email representation."""
+
+    id: str
+    subject: str
+    sender: str
+    recipients: list[str]
+    date: str
+    has_attachments: bool
+
+
+class EmailDetailSchema(EmailSchema):
+    """Schema for detailed email representation."""
+
+    body: str
+    attachments: list[dict[str, Any]]
+
+
 class OAuthCredentialsResponse(BaseModel):
     """Response model for OAuth credentials."""
 
@@ -61,45 +80,62 @@ class OAuthCredentialsResponse(BaseModel):
     scope: str
 
 
-@router.get("/auth-url", response_model=dict[str, str])
-async def get_auth_url() -> dict[str, str]:
-    """
-    Get the OAuth authorization URL for Outlook.
+class OAuthConfig(BaseModel):
+    """Model for OAuth client configuration."""
 
-    Returns:
-        Dict[str, str]: Dictionary with authorization URL
-    """
-    auth_url = oauth_flow.get_auth_url()
-    return {"auth_url": auth_url}
+    client_id: str
+    client_secret: str
+    redirect_uri: str = "http://localhost:8000/outlook/auth-callback"
 
 
-@router.get("/auth-callback", response_model=OAuthCredentialsResponse)
-async def auth_callback(
-    code: str = Query(..., description="Authorization code"),
-) -> OAuthCredentialsResponse:
-    """
-    Handle OAuth2 callback from Microsoft.
-
-    Args:
-        code: Authorization code from OAuth2 flow
-
-    Returns:
-        OAuthCredentialsResponse: OAuth2 tokens and related information
-    """
+@router.post("/auth-url", response_model=dict[str, str])
+async def get_auth_url(
+    config: OAuthConfig | None = None,
+) -> dict[str, str]:
+    """Get the OAuth authentication URL for Outlook."""
     try:
-        result = oauth_flow.get_token_from_code(code)
-        return OAuthCredentialsResponse(
-            access_token=result.get("access_token", ""),
-            refresh_token=result.get("refresh_token"),
-            expires_in=result.get("expires_in", 0),
-            token_type=result.get("token_type", "Bearer"),
-            scope=result.get("scope", ""),
-        )
+        # Get the OAuth flow instance
+        flow_instance = outlook_oauth_flow
+        if config:
+            flow_instance = OutlookAuthManager(
+                client_id=config.client_id,
+                client_secret=config.client_secret,
+                redirect_uri=config.redirect_uri,
+            )
+
+        # Get the authorization URL
+        auth_url = flow_instance.get_authorization_url()
+
+        return {"auth_url": auth_url}
     except Exception as e:
-        logger.exception("Error in Outlook auth callback")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authentication error: {str(e)}",
+            detail=f"Failed to get authentication URL: {str(e)}",
+        ) from e
+
+
+@router.post("/auth-callback", response_model=OAuthCredentialsResponse)
+async def auth_callback(
+    code: str = Query(..., description="Authorization code"),
+    config: OAuthConfig | None = None,
+) -> OAuthCredentialsResponse:
+    """Handle the OAuth callback from Outlook."""
+    try:
+        # Get the OAuth flow instance
+        flow_instance = outlook_oauth_flow
+        if config:
+            flow_instance = OutlookAuthManager(
+                client_id=config.client_id,
+                client_secret=config.client_secret,
+                redirect_uri=config.redirect_uri,
+            )
+
+        # Exchange the authorization code for credentials
+        return flow_instance.exchange_code(code)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to exchange authorization code: {str(e)}",
         ) from e
 
 

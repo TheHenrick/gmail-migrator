@@ -105,16 +105,20 @@
                     </label>
                     <div class="option-text">
                         <h4>Batch Processing</h4>
-                        <p>Process emails in batches for improved performance</p>
+                        <p>Process emails in batches to manage memory usage</p>
                     </div>
                 </div>
 
-                <div id="batchSizeContainer">
-                    <h4>Batch Size</h4>
-                    <div class="slider-container">
-                        <input type="range" min="10" max="100" value="50" step="10" id="batchSizeSlider">
-                        <div class="slider-value" id="batchSizeValue">50 emails</div>
+                <div id="batchSizeContainer" class="option-item">
+                    <div class="batch-size-slider">
+                        <label for="batchSizeSlider">Batch Size: <span id="batchSizeValue">50 emails</span></label>
+                        <input type="range" id="batchSizeSlider" min="10" max="200" step="10" value="50">
                     </div>
+                </div>
+
+                <!-- OAuth Settings Button -->
+                <div class="option-item">
+                    <button id="oauthSettingsBtn" class="button secondary">OAuth Settings</button>
                 </div>
             </section>
 
@@ -165,6 +169,75 @@
                     <button class="button success" id="downloadReport" disabled>Download Report</button>
                 </div>
             </section>
+
+            <!-- OAuth Settings Modal -->
+            <div id="oauthSettingsModal" class="modal">
+                <div class="modal-content">
+                    <span class="close-modal">&times;</span>
+                    <h2>OAuth Settings</h2>
+                    <p class="modal-description">Configure OAuth credentials for each service. These are necessary for authentication.</p>
+
+                    <div class="tabs">
+                        <button class="tab-button active" data-tab="gmail">Gmail</button>
+                        <button class="tab-button" data-tab="outlook">Outlook</button>
+                        <button class="tab-button" data-tab="yahoo">Yahoo</button>
+                    </div>
+
+                    <div id="gmail-tab" class="tab-content active">
+                        <form id="gmailOAuthForm" class="oauth-form">
+                            <div class="form-group">
+                                <label for="gmailClientId">Client ID</label>
+                                <input type="text" id="gmailClientId" name="clientId" placeholder="Your Gmail OAuth Client ID">
+                            </div>
+                            <div class="form-group">
+                                <label for="gmailClientSecret">Client Secret</label>
+                                <input type="password" id="gmailClientSecret" name="clientSecret" placeholder="Your Gmail OAuth Client Secret">
+                            </div>
+                            <div class="form-group">
+                                <label for="gmailRedirectUri">Redirect URI</label>
+                                <input type="text" id="gmailRedirectUri" name="redirectUri" placeholder="http://localhost:8000/gmail/auth-callback">
+                            </div>
+                            <button type="submit" class="button primary">Save Gmail Settings</button>
+                        </form>
+                    </div>
+
+                    <div id="outlook-tab" class="tab-content">
+                        <form id="outlookOAuthForm" class="oauth-form">
+                            <div class="form-group">
+                                <label for="outlookClientId">Client ID</label>
+                                <input type="text" id="outlookClientId" name="clientId" placeholder="Your Outlook OAuth Client ID">
+                            </div>
+                            <div class="form-group">
+                                <label for="outlookClientSecret">Client Secret</label>
+                                <input type="password" id="outlookClientSecret" name="clientSecret" placeholder="Your Outlook OAuth Client Secret">
+                            </div>
+                            <div class="form-group">
+                                <label for="outlookRedirectUri">Redirect URI</label>
+                                <input type="text" id="outlookRedirectUri" name="redirectUri" placeholder="http://localhost:8000/outlook/auth-callback">
+                            </div>
+                            <button type="submit" class="button primary">Save Outlook Settings</button>
+                        </form>
+                    </div>
+
+                    <div id="yahoo-tab" class="tab-content">
+                        <form id="yahooOAuthForm" class="oauth-form">
+                            <div class="form-group">
+                                <label for="yahooClientId">Client ID</label>
+                                <input type="text" id="yahooClientId" name="clientId" placeholder="Your Yahoo OAuth Client ID">
+                            </div>
+                            <div class="form-group">
+                                <label for="yahooClientSecret">Client Secret</label>
+                                <input type="password" id="yahooClientSecret" name="clientSecret" placeholder="Your Yahoo OAuth Client Secret">
+                            </div>
+                            <div class="form-group">
+                                <label for="yahooRedirectUri">Redirect URI</label>
+                                <input type="text" id="yahooRedirectUri" name="redirectUri" placeholder="http://localhost:8000/yahoo/auth-callback">
+                            </div>
+                            <button type="submit" class="button primary">Save Yahoo Settings</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <footer>

@@ -56,22 +56,31 @@ def mock_gmail_client():
 def test_auth_url(client, mock_oauth_flow):
     """Test auth URL endpoint."""
     with patch("app.api.routers.gmail.oauth_flow", mock_oauth_flow):
-        response = client.get("/gmail/auth-url")
+        response = client.post("/gmail/auth-url")
         data = response.json()
 
         assert response.status_code == 200
         assert "auth_url" in data
-        assert data["auth_url"] == "https://mock-auth-url.com"
 
 
 def test_auth_callback(client, mock_oauth_flow):
     """Test auth callback endpoint."""
     with patch("app.api.routers.gmail.oauth_flow", mock_oauth_flow):
-        response = client.get("/gmail/auth-callback?code=test_code")
+        mock_oauth_flow.exchange_code.return_value = {
+            "access_token": "test_token",
+            "refresh_token": "test_refresh_token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "test_client_id",
+            "client_secret": "test_client_secret",
+            "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+        }
+
+        response = client.post("/gmail/auth-callback?code=test_code")
         data = response.json()
 
         assert response.status_code == 200
-        assert "message" in data
+        assert "access_token" in data
+        assert data["access_token"] == "test_token"
         mock_oauth_flow.exchange_code.assert_called_once_with("test_code")
 
 

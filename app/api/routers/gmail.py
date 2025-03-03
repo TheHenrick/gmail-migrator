@@ -1,14 +1,15 @@
 """Router for Gmail-related API endpoints."""
 
 import logging
-from typing import Annotated, NoReturn
+from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client
-from app.services.gmail.auth import oauth_flow
+from app.services.gmail.auth import OAuthFlow, oauth_flow
 from app.services.gmail.client import GmailClient
+from app.utils.exceptions import raise_server_error
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -46,6 +47,14 @@ class OAuthCredentialsResponse(BaseModel):
     scopes: list[str]
 
 
+class OAuthConfig(BaseModel):
+    """Model for OAuth client configuration."""
+
+    client_id: str
+    client_secret: str
+    redirect_uri: str = "http://localhost:8000/gmail/auth-callback"
+
+
 # Error types
 EMAIL = "Email"
 ATTACHMENT = "Attachment"
@@ -66,23 +75,6 @@ def raise_not_found(resource_type: str, resource_id: str) -> NoReturn:
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"{resource_type} with ID {resource_id} not found",
     )
-
-
-def raise_server_error(message: str, error: Exception) -> NoReturn:
-    """
-    Raise a 500 Internal Server Error exception.
-
-    Args:
-        message: Error message
-        error: Exception that caused the error
-
-    Raises:
-        HTTPException: 500 Internal Server Error exception
-    """
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"{message}: {str(error)}",
-    ) from error
 
 
 @router.post("/auth", response_model=OAuthCredentialsResponse)
@@ -228,38 +220,48 @@ async def get_attachment(
 
 
 # Auth-related endpoints
-@router.get("/auth-url", response_model=dict[str, str])
-async def get_auth_url() -> dict[str, str]:
-    """
-    Generate an authorization URL for Gmail OAuth flow.
-
-    Returns:
-        A dictionary containing the authorization URL
-    """
+@router.post("/auth-url", response_model=dict[str, str])
+async def get_auth_url(
+    config: OAuthConfig | None = None,
+) -> dict[str, str]:
+    """Get the OAuth authentication URL for Gmail."""
     try:
-        auth_url, state = oauth_flow.get_authorization_url()
-        return {"auth_url": auth_url, "state": state}
+        # Get the OAuth flow instance
+        flow_instance = oauth_flow
+        if config:
+            flow_instance = OAuthFlow(
+                client_id=config.client_id,
+                client_secret=config.client_secret,
+                redirect_uri=config.redirect_uri,
+            )
+
+        # Get the authorization URL
+        auth_url, state = flow_instance.get_authorization_url()
+
+        return {"auth_url": auth_url}
     except Exception as e:
-        logger.exception("Error generating auth URL")
-        raise_server_error("Failed to generate auth URL", e)
+        raise_server_error("Failed to get authentication URL", e)
 
 
-@router.get("/auth-callback", response_model=dict[str, str])
+@router.post("/auth-callback", response_model=dict[str, Any])
 async def auth_callback(
     code: str = Query(..., description="Authorization code"),
-) -> dict[str, str]:
-    """
-    Handle OAuth callback with authorization code.
-
-    Args:
-        code: Authorization code from Google OAuth
-
-    Returns:
-        A success message
-    """
+    config: OAuthConfig | None = None,
+) -> dict[str, Any]:
+    """Handle the OAuth callback from Gmail."""
     try:
-        oauth_flow.exchange_code(code)
-        return {"message": "Authentication successful"}
+        # Get the OAuth flow instance
+        flow_instance = oauth_flow
+        if config:
+            flow_instance = OAuthFlow(
+                client_id=config.client_id,
+                client_secret=config.client_secret,
+                redirect_uri=config.redirect_uri,
+            )
+
+        # Exchange the authorization code for credentials
+        return flow_instance.exchange_code(code)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Error during OAuth callback")
-        raise_server_error("Authentication failed", e)
+        raise_server_error("Failed to exchange authorization code", e)
