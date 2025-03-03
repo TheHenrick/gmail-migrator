@@ -15,10 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify commit signatures
+      - name: Check for unsigned commits
         run: |
           # Define the cutoff commit after which signatures are required
-          # This is the commit that introduced the signed commit requirement
           SIGNATURE_REQUIREMENT_COMMIT="dea847bd8f790ab69280e3e95e1f3c48fb0b2158"
 
           # Get all commits in the PR (for pull_request) or the push (for push)
@@ -38,8 +37,10 @@ jobs:
             exit 0
           fi
 
-          # Check each commit for a valid signature, but only if it's newer than the requirement commit
-          UNSIGNED_COMMITS=0
+          # We'll use GitHub's API to check commit signature verification status
+          # This uses the same verification logic that GitHub web interface uses
+          UNVERIFIED_COMMITS=0
+
           for COMMIT in $COMMITS; do
             # Skip commits that are the requirement commit or older
             if git merge-base --is-ancestor $COMMIT $SIGNATURE_REQUIREMENT_COMMIT; then
@@ -47,21 +48,26 @@ jobs:
               continue
             fi
 
-            SIGNATURE=$(git verify-commit $COMMIT 2>&1 || echo "UNSIGNED")
-            if [[ $SIGNATURE == *"UNSIGNED"* ]]; then
-              echo "❌ Unsigned commit: $COMMIT"
+            # Query GitHub API for this commit's verification status
+            VERIFICATION_STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/commits/$COMMIT" | \
+              jq -r '.commit.verification.verified')
+
+            # Check verification status from GitHub API
+            if [ "$VERIFICATION_STATUS" = "true" ]; then
+              echo "✅ GitHub verified commit: $COMMIT"
               git log -1 --pretty=format:"%h %an <%ae> %s" $COMMIT
-              UNSIGNED_COMMITS=$((UNSIGNED_COMMITS + 1))
             else
-              echo "✅ Signed commit: $COMMIT"
+              echo "❌ GitHub shows unverified commit: $COMMIT"
               git log -1 --pretty=format:"%h %an <%ae> %s" $COMMIT
+              UNVERIFIED_COMMITS=$((UNVERIFIED_COMMITS + 1))
             fi
           done
 
-          # Fail if there are unsigned commits
-          if [ $UNSIGNED_COMMITS -gt 0 ]; then
-            echo "::error::Found $UNSIGNED_COMMITS unsigned commits. All commits must be signed."
+          # Fail if there are unverified commits according to GitHub
+          if [ $UNVERIFIED_COMMITS -gt 0 ]; then
+            echo "::error::Found $UNVERIFIED_COMMITS commits not verified by GitHub. All commits must be verified."
             exit 1
           fi
 
-          echo "All commits are properly signed! ✅"
+          echo "All commits are properly verified by GitHub! ✅"
