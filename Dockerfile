@@ -1,10 +1,18 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install Poetry
+RUN pip install --no-cache-dir poetry==1.8.5
+
+# Copy Poetry configuration files
+COPY pyproject.toml poetry.lock* ./
+
+# Configure Poetry to not create a virtual environment in the container
+RUN poetry config virtualenvs.create false
+
 # Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN poetry install --no-interaction --no-ansi --no-dev
 
 # Copy application code
 COPY . .
@@ -16,5 +24,5 @@ ENV PYTHONUNBUFFERED=1
 # Expose port for the application
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Run the application with Flask
+CMD ["flask", "--app", "app.app:create_app()", "run", "--host", "0.0.0.0", "--port", "8000"] 

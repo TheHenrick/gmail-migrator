@@ -11,6 +11,8 @@ services:
     environment:
       - DEBUG=True
       - LOG_LEVEL=INFO
+      - FLASK_APP=app.app:create_app()
+      - FLASK_DEBUG=1
       - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
       - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
       - GMAIL_REDIRECT_URI=${GMAIL_REDIRECT_URI}

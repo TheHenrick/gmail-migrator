@@ -16,7 +16,8 @@ A tool to help users migrate their Gmail emails to other email service providers
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.12+
+- Poetry (for dependency management)
 - Docker (optional, for containerized deployment)
 
 ### Installation
@@ -27,9 +28,9 @@ A tool to help users migrate their Gmail emails to other email service providers
    cd gmail-migrator
    ```
 
-2. Install dependencies:
+2. Install dependencies with Poetry:
    ```
-   pip install -r requirements.txt
+   poetry install
    ```
 
 3. Configure your environment variables:
@@ -38,10 +39,34 @@ A tool to help users migrate their Gmail emails to other email service providers
    # Edit .env with your configuration
    ```
 
-### Running with Docker
+### Running the application
+
+#### Using Poetry
+
+```bash
+# Activate the Poetry virtual environment
+poetry shell
+
+# Run the application
+python wsgi.py
+```
+
+#### Using Docker Compose
 
 ```bash
 docker compose up -d
+```
+
+## Development
+
+### Running tests
+
+```bash
+# Using Poetry
+poetry run pytest
+
+# Or within the Poetry shell
+pytest
 ```
 
 ## License
