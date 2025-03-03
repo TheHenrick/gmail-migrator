@@ -10,7 +10,7 @@ updates:
       - "dependencies"
       - "security"
     assignees:
-      - "yourusername"
+      - "TheHenrick"
     commit-message:
       prefix: "dependencies"
       include: "scope"
@@ -22,8 +22,6 @@ updates:
         update-types:
           - "patch"
           - "minor"
-    # Use vulnerability alerts instead
-    vulnerability-alerts: true
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"
@@ -35,7 +33,7 @@ updates:
       - "dependencies"
       - "ci"
     assignees:
-      - "yourusername"
+      - "TheHenrick"
     commit-message:
       prefix: "ci"
       include: "scope"
@@ -50,7 +48,7 @@ updates:
       - "dependencies"
       - "docker"
     assignees:
-      - "yourusername"
+      - "TheHenrick"
     commit-message:
       prefix: "docker"
       include: "scope"
