@@ -23,7 +23,7 @@ jobs:
           cache: 'pip'
 
       - name: Cache pip dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/poetry.lock') }}
@@ -39,7 +39,7 @@ jobs:
 
       - name: Load cached virtual environment
         id: cached-poetry-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-${{ hashFiles('**/pyproject.toml') }}
@@ -52,7 +52,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Cache pytest results
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .pytest_cache
           key: pytest-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
@@ -88,7 +88,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Cache Docker layers
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
