@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
 from app.config import settings
+from app.api.routers.gmail import router as gmail_router
 
 # Set up logging
 logging.basicConfig(
@@ -51,11 +52,8 @@ async def health():
     return {"status": "healthy"}
 
 
-# Include routers here
-# from app.api.routers import gmail_router, outlook_router, yahoo_router
-# app.include_router(gmail_router)
-# app.include_router(outlook_router)
-# app.include_router(yahoo_router)
+# Include routers
+app.include_router(gmail_router)
 
 
 if __name__ == "__main__":
