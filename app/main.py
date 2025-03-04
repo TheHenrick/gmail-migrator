@@ -48,7 +48,12 @@ async def root(request: Request) -> HTMLResponse:
         HTML response with the home page
     """
     return templates.TemplateResponse(
-        "index.html", {"request": request, "title": "Gmail Migrator"}
+        "index.html",
+        {
+            "request": request,
+            "title": "Gmail Migrator",
+            "gmail_client_id": settings.GMAIL_CLIENT_ID,
+        },
     )
 
 

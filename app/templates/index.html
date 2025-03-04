@@ -6,6 +6,10 @@
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600&display=swap">
+    <!-- Google Sign-In Script -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Add meta tag for Google client ID -->
+    <meta name="google-signin-client_id" content="{{ gmail_client_id }}">
 </head>
 <body>
     <div class="container">
@@ -20,15 +24,19 @@
                 <p>Connect your accounts and begin transferring your emails to a new service.</p>
 
                 <div class="source-section">
-                    <h3>Source Account</h3>
-                    <div class="account-selector">
-                        <div class="account-option selected">
-                            <img src="{{ url_for('static', path='/img/gmail.svg') }}" alt="Gmail" class="service-icon">
-                            <span>Gmail</span>
-                        </div>
-                    </div>
+                    <h3>Source Account: Gmail</h3>
 
-                    <button class="button primary" id="connectGmail">Connect Gmail</button>
+                    <!-- Gmail Auth container -->
+                    <div id="googleSignInButtonContainer" class="google-signin-container">
+                        <!-- Apple HIG-styled Gmail OAuth button -->
+                        <button id="directGmailAuthBtn" class="button gmail-auth-button" onclick="console.log('Button clicked directly'); connectToGmail();">
+                            <div class="auth-button-content">
+                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" class="auth-button-icon">
+                                <span class="auth-button-text">Sign in with Google</span>
+                            </div>
+                        </button>
+                        <p class="auth-description">Connect to your Gmail account to migrate emails</p>
+                    </div>
                 </div>
 
                 <div class="destination-section">

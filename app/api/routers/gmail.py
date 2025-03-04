@@ -1,13 +1,22 @@
 """Router for Gmail-related API endpoints."""
 
+import json
 import logging
 from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from app.dependencies import get_gmail_client
-from app.services.gmail.auth import OAuthFlow, oauth_flow
+from app.dependencies import get_gmail_client, get_gmail_redirect_uri
+from app.services.gmail.auth import OAuthFlow, exchange_code, oauth_flow
 from app.services.gmail.client import GmailClient
 from app.utils.exceptions import raise_server_error
 
@@ -219,13 +228,39 @@ async def get_attachment(
         raise_server_error("Failed to retrieve attachment", e)
 
 
+# Models for Google Sign-In
+class GoogleSignInRequest(BaseModel):
+    """Request model for Google Sign-In authentication."""
+
+    credential: str
+
+
+# Add the new endpoint for Google Sign-In
+@router.post("/google-signin", response_model=dict[str, Any])
+async def google_signin(request: GoogleSignInRequest) -> dict[str, Any]:
+    """Handle Google Sign-In and exchange for Gmail OAuth access."""
+    try:
+        # Get the OAuth flow instance
+        flow_instance = oauth_flow
+
+        # Exchange the Google credential for Gmail OAuth access
+        # This will verify the token and request Gmail access
+        return flow_instance.exchange_google_credential(request.credential)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise_server_error("Failed to process Google Sign-In", e)
+
+
 # Auth-related endpoints
+@router.get("/auth-url", response_model=dict[str, str])
 @router.post("/auth-url", response_model=dict[str, str])
 async def get_auth_url(
-    config: OAuthConfig | None = None,
+    config: OAuthConfig = None,
 ) -> dict[str, str]:
     """Get the OAuth authentication URL for Gmail."""
     try:
+        logger.info("Generating Gmail OAuth URL")
         # Get the OAuth flow instance
         flow_instance = oauth_flow
         if config:
@@ -240,28 +275,90 @@ async def get_auth_url(
 
         return {"auth_url": auth_url}
     except Exception as e:
+        logger.exception("Error getting auth URL")
         raise_server_error("Failed to get authentication URL", e)
 
 
-@router.post("/auth-callback", response_model=dict[str, Any])
-async def auth_callback(
-    code: str = Query(..., description="Authorization code"),
-    config: OAuthConfig | None = None,
-) -> dict[str, Any]:
+@router.get("/auth-callback", response_model=None)
+@router.post("/auth-callback", response_model=None)
+async def auth_callback(code: str) -> HTMLResponse:
     """Handle the OAuth callback from Gmail."""
     try:
-        # Get the OAuth flow instance
-        flow_instance = oauth_flow
-        if config:
-            flow_instance = OAuthFlow(
-                client_id=config.client_id,
-                client_secret=config.client_secret,
-                redirect_uri=config.redirect_uri,
+        # Exchange the authorization code for tokens
+        logger.info("Received authorization code, exchanging for token")
+        token_response = await exchange_code(code, get_gmail_redirect_uri())
+
+        # Get the access token for making API calls
+        access_token = token_response.get("access_token", "")
+
+        # Fetch user profile information from Google
+        user_info = await fetch_user_profile(access_token)
+
+        # Create HTML response that stores token and redirects
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <script>
+                // Store the token in localStorage
+                localStorage.setItem('gmailToken', '{access_token}');
+
+                // Store actual user info from Google
+                const userInfo = {user_info};
+
+                // Store the user info
+                localStorage.setItem('gmailUserInfo', JSON.stringify(userInfo));
+
+                // Log the stored info
+                console.log('Token stored:', localStorage.getItem('gmailToken'));
+                console.log('User info stored:', localStorage.getItem('gmailUserInfo'));
+
+                // Redirect to main page
+                window.location.href = '/';
+            </script>
+        </head>
+        <body>
+            <h1>Authentication Successful</h1>
+            <p>You have successfully authenticated with Gmail.
+               Redirecting back to the application...</p>
+        </body>
+        </html>
+        """
+
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.exception("Error in auth callback")
+        raise_server_error("Failed to process OAuth callback", e)
+
+
+async def fetch_user_profile(access_token: str) -> str:
+    """Fetch user profile information from Google using the access token."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v1/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
             )
 
-        # Exchange the authorization code for credentials
-        return flow_instance.exchange_code(code)
-    except HTTPException:
-        raise
+            if response.status_code == 200:
+                # Get user profile data and convert to JSON string for template
+                profile_data = response.json()
+                # Format as a JS object string
+                return json.dumps(
+                    {
+                        "name": profile_data.get("name", "Gmail User"),
+                        "email": profile_data.get("email", "gmail@user.com"),
+                        "picture": profile_data.get("picture", ""),
+                    }
+                )
+
+            # If not successful response
+            error_msg = f"Failed to fetch user profile: {response.status_code}"
+            logger.error(error_msg)
+            return json.dumps(
+                {"name": "Gmail User", "email": "gmail@user.com", "picture": ""}
+            )
     except Exception as e:
-        raise_server_error("Failed to exchange authorization code", e)
+        logger.exception("Error fetching user profile")
+        raise_server_error("Failed to fetch user profile", e)

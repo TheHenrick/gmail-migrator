@@ -63,10 +63,13 @@ def test_auth_url(client, mock_oauth_flow):
         assert "auth_url" in data
 
 
-def test_auth_callback(client, mock_oauth_flow):
-    """Test auth callback endpoint."""
-    with patch("app.api.routers.gmail.oauth_flow", mock_oauth_flow):
-        mock_oauth_flow.exchange_code.return_value = {
+def test_auth_callback_post(client, mock_oauth_flow):
+    """Test auth callback endpoint with POST method."""
+    with (
+        patch("app.api.routers.gmail.oauth_flow", mock_oauth_flow),
+        patch("app.api.routers.gmail.exchange_code") as mock_exchange_code,
+    ):
+        mock_exchange_code.return_value = {
             "access_token": "test_token",
             "refresh_token": "test_refresh_token",
             "token_uri": "https://oauth2.googleapis.com/token",
@@ -75,13 +78,49 @@ def test_auth_callback(client, mock_oauth_flow):
             "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
         }
 
-        response = client.post("/gmail/auth-callback?code=test_code")
-        data = response.json()
+        # Mock the fetch_user_profile function to return a JSON string
+        with patch(
+            "app.api.routers.gmail.fetch_user_profile",
+            return_value='{"name":"Test User","email":"test@example.com","picture":""}',
+        ):
+            response = client.post("/gmail/auth-callback?code=test_code")
 
-        assert response.status_code == 200
-        assert "access_token" in data
-        assert data["access_token"] == "test_token"
-        mock_oauth_flow.exchange_code.assert_called_once_with("test_code")
+            # Test for HTML response
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "text/html; charset=utf-8"
+            assert "Authentication Successful" in response.text
+            assert "gmailToken" in response.text
+            assert "test_token" in response.text
+
+
+def test_auth_callback_get(client, mock_oauth_flow):
+    """Test auth callback endpoint with GET method."""
+    with (
+        patch("app.api.routers.gmail.oauth_flow", mock_oauth_flow),
+        patch("app.api.routers.gmail.exchange_code") as mock_exchange_code,
+    ):
+        mock_exchange_code.return_value = {
+            "access_token": "test_token",
+            "refresh_token": "test_refresh_token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "test_client_id",
+            "client_secret": "test_client_secret",
+            "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+        }
+
+        # Mock the fetch_user_profile function to return a JSON string
+        with patch(
+            "app.api.routers.gmail.fetch_user_profile",
+            return_value='{"name":"Test User","email":"test@example.com","picture":""}',
+        ):
+            response = client.get("/gmail/auth-callback?code=test_code")
+
+            # Test for HTML response
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "text/html; charset=utf-8"
+            assert "Authentication Successful" in response.text
+            assert "gmailToken" in response.text
+            assert "test_token" in response.text
 
 
 def test_get_emails(client, mock_gmail_client):
