@@ -67,10 +67,10 @@ A tool to help users migrate their Gmail emails to other email service providers
    poetry install
    ```
 
-3. Configure your environment variables:
+3. Configure environment variables (optional, only for development/debugging):
    ```
    cp .env.example .env
-   # Edit .env with your configuration
+   # Edit .env with debug settings
    ```
 
 ### Running the application
@@ -90,6 +90,35 @@ python wsgi.py
 ```bash
 docker compose up -d
 ```
+
+### Using the Application
+
+1. Access the web interface at http://localhost:8000
+2. Configure OAuth credentials:
+   - Click on "OAuth Settings" in the Migration Options section
+   - Enter your OAuth credentials for Gmail, Outlook, or Yahoo
+   - Save your settings
+
+3. Start the migration:
+   - Connect to your source email account (e.g., Gmail)
+   - Select and connect to your destination account (e.g., Outlook)
+   - Configure migration options
+   - Click "Start Migration"
+
+### OAuth Configuration
+
+This application uses OAuth for secure API access. You'll need to create OAuth applications in:
+
+- Google Cloud Platform (for Gmail access)
+- Microsoft Azure Portal (for Outlook access)
+- Yahoo Developer Network (for Yahoo Mail access)
+
+When creating these applications, set the redirect URIs to:
+- Gmail: `http://localhost:8000/gmail/auth-callback`
+- Outlook: `http://localhost:8000/outlook/auth-callback`
+- Yahoo: `http://localhost:8000/yahoo/auth-callback`
+
+Enter the client IDs and secrets in the application's OAuth Settings modal.
 
 ## Development
 

@@ -1,6 +1,7 @@
 """FastAPI dependencies for the application."""
 
 import logging
+import os
 from typing import Annotated
 
 from fastapi import Header, HTTPException, status
@@ -9,6 +10,17 @@ from app.services.gmail.client import GmailClient
 from app.services.outlook.client import OutlookClient
 
 logger = logging.getLogger(__name__)
+
+
+def get_gmail_redirect_uri() -> str:
+    """
+    Get the configured Gmail redirect URI from environment variables or use a default.
+
+    Returns:
+        str: The redirect URI for Gmail OAuth
+    """
+    # Get the redirect URI from environment variables or use default
+    return os.getenv("GMAIL_REDIRECT_URI", "http://localhost:8000/gmail/auth-callback")
 
 
 async def get_gmail_client(
