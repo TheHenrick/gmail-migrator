@@ -7,31 +7,53 @@
 
 A tool to help users migrate their Gmail emails to other email service providers like Outlook, Yahoo Mail, and others.
 
-## Features (Planned)
+## Features
+
+### Implemented Features
 
 - **Authentication & Connection**
   - Connect to Gmail using OAuth2
   - Connect to Outlook using Microsoft Graph API
-  - Connect to Yahoo Mail using OAuth2
   - Secure credential management with token refresh
 
 - **Email Retrieval & Processing**
-  - Fetch emails from Gmail with advanced filtering options
-  - Support for date ranges, labels, and search queries
+  - Fetch emails from Gmail with filtering options
   - Process email content while maintaining formatting
-  - Handle email threads and conversations
+  - Handle email metadata
 
 - **Email Migration**
-  - Migrate emails to Outlook, Yahoo, and other providers
-  - Support for batch processing of large email volumes
-  - Transfer emails with attachments and embedded images
-  - Preserve email metadata (dates, read/unread status)
-  - Maintain folder structures and label hierarchies
+  - Migrate individual emails from Gmail to Outlook
+  - Batch migration of multiple emails
+  - Transfer emails with attachments
+  - Create folders in Outlook for organizing migrated emails
 
 - **User Interface**
-  - Modern, responsive web interface following Apple HIG principles
+  - Basic web interface following Apple HIG principles
+  - OAuth connection workflow for Gmail and Outlook
+
+- **API Endpoints**
+  - Gmail authentication and email retrieval
+  - Outlook authentication, folder management, and email migration
+  - Health check endpoint
+
+### Planned Features
+
+- **Authentication & Connection**
+  - Connect to Yahoo Mail using OAuth2
+  - Support for additional email providers
+
+- **Email Retrieval & Processing**
+  - Advanced filtering options (date ranges, labels, search queries)
+  - Improved handling of email threads and conversations
+
+- **Email Migration**
+  - Migration to Yahoo and other providers
+  - Improved preservation of email metadata (read/unread status)
+  - Better maintenance of folder structures and label hierarchies
+
+- **User Interface**
+  - Enhanced, responsive web interface
   - Real-time progress reporting during migration
-  - User-friendly OAuth connection workflow
   - Detailed migration statistics and reporting
 
 - **Reliability & Performance**
@@ -44,7 +66,6 @@ A tool to help users migrate their Gmail emails to other email service providers
   - End-to-end encryption for data in transit
   - No permanent storage of email content
   - Temporary caching with secure deletion
-  - OAuth token management with proper scoping
 
 ## Getting Started
 
@@ -52,7 +73,7 @@ A tool to help users migrate their Gmail emails to other email service providers
 
 - Python 3.12+
 - Poetry (for dependency management)
-- Docker (optional, for containerized deployment)
+- Docker and Docker Compose (optional, for containerized deployment)
 
 ### Installation
 
@@ -67,10 +88,10 @@ A tool to help users migrate their Gmail emails to other email service providers
    poetry install
    ```
 
-3. Configure environment variables (optional, only for development/debugging):
+3. Configure environment variables:
    ```
    cp .env.example .env
-   # Edit .env with debug settings
+   # Edit .env with your OAuth credentials
    ```
 
 ### Running the application
@@ -96,13 +117,14 @@ docker compose up -d
 1. Access the web interface at http://localhost:8000
 2. Configure OAuth credentials:
    - Click on "OAuth Settings" in the Migration Options section
-   - Enter your OAuth credentials for Gmail, Outlook, or Yahoo
+   - Enter your OAuth credentials for Gmail and Outlook
    - Save your settings
 
 3. Start the migration:
-   - Connect to your source email account (e.g., Gmail)
-   - Select and connect to your destination account (e.g., Outlook)
-   - Configure migration options
+   - Connect to your Gmail account
+   - Connect to your Outlook account
+   - Select emails to migrate
+   - Choose destination folder (optional)
    - Click "Start Migration"
 
 ### OAuth Configuration
@@ -111,34 +133,191 @@ This application uses OAuth for secure API access. You'll need to create OAuth a
 
 - Google Cloud Platform (for Gmail access)
 - Microsoft Azure Portal (for Outlook access)
-- Yahoo Developer Network (for Yahoo Mail access)
+- Yahoo Developer Network (for Yahoo Mail access, planned)
 
 When creating these applications, set the redirect URIs to:
 - Gmail: `http://localhost:8000/gmail/auth-callback`
 - Outlook: `http://localhost:8000/outlook/auth-callback`
 - Yahoo: `http://localhost:8000/yahoo/auth-callback`
 
-Enter the client IDs and secrets in the application's OAuth Settings modal.
+Enter the client IDs and secrets in the application's OAuth Settings modal or in your `.env` file.
+
+#### Creating Gmail OAuth Credentials
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Navigate to "APIs & Services" > "Credentials"
+4. Click "Create Credentials" and select "OAuth client ID"
+5. If prompted, configure the OAuth consent screen:
+   - User Type: External
+   - App name: Gmail Migrator
+   - User support email: Your email
+   - Developer contact information: Your email
+   - Authorized domains: Add your domain if applicable
+6. For the OAuth client ID:
+   - Application type: Web application
+   - Name: Gmail Migrator
+   - Authorized JavaScript origins: `http://localhost:8000`
+   - Authorized redirect URIs: `http://localhost:8000/gmail/auth-callback`
+7. Click "Create" and note your Client ID and Client Secret
+8. Enable the Gmail API:
+   - Navigate to "APIs & Services" > "Library"
+   - Search for "Gmail API" and enable it
+
+#### Creating Outlook OAuth Credentials
+
+1. Go to the [Microsoft Azure Portal](https://portal.azure.com/)
+2. Navigate to "Azure Active Directory" > "App registrations"
+3. Click "New registration"
+4. Enter the following information:
+   - Name: Gmail Migrator
+   - Supported account types: "Accounts in any organizational directory and personal Microsoft accounts"
+   - Redirect URI: Web > `http://localhost:8000/outlook/auth-callback`
+5. Click "Register"
+6. Note your Application (client) ID from the Overview page
+7. Navigate to "Certificates & secrets" in the left menu
+8. Under "Client secrets", click "New client secret"
+9. Add a description and select an expiration period
+10. Click "Add" and note the Value (this is your client secret)
+11. Navigate to "API permissions" in the left menu
+12. Click "Add a permission" > "Microsoft Graph" > "Delegated permissions"
+13. Add the following permissions:
+    - Mail.Read
+    - Mail.ReadWrite
+    - Mail.Send
+    - User.Read
+14. Click "Add permissions"
+15. Click "Grant admin consent" if you have admin rights
 
 ## Development
 
-### Running tests
+### Project Structure
 
-```bash
-# Using Poetry
-poetry run pytest
-
-# Or within the Poetry shell
-pytest
+```
+gmail-migrator/
+├── app/                    # Main application code
+│   ├── api/                # API endpoints
+│   │   └── routers/        # API routers (Gmail, Outlook)
+│   │   └── services/       # Service implementations
+│   │   └── utils/          # Utility functions
+│   ├── config/             # Configuration settings
+│   ├── models/             # Data models
+│   ├── static/             # Static assets
+│   ├── templates/          # HTML templates
+│   └── utils/              # Utility functions
+├── scripts/                # Development scripts
+├── tests/                  # Test suite
+├── .github/                # GitHub workflows
+├── docker-compose.yml      # Docker Compose configuration
+├── Dockerfile              # Docker configuration
+├── pyproject.toml          # Poetry configuration
+└── README.md               # Project documentation
 ```
 
-## License
+### Setting Up Development Environment
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. Install development dependencies:
+   ```bash
+   poetry install
+   ```
 
-## Contributing
+2. Install pre-commit hooks:
+   ```bash
+   poetry run pre-commit install
+   ```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+3. Set up your OAuth credentials in `.env` file:
+   ```
+   GMAIL_CLIENT_ID=your_client_id
+   GMAIL_CLIENT_SECRET=your_client_secret
+   GMAIL_REDIRECT_URI=http://localhost:8000/gmail/auth-callback
+   OUTLOOK_CLIENT_ID=your_client_id
+   OUTLOOK_CLIENT_SECRET=your_client_secret
+   OUTLOOK_REDIRECT_URI=http://localhost:8000/outlook/auth-callback
+   ```
+
+### Running Tests
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run tests with coverage report
+poetry run pytest --cov=app --cov-report=term --cov-report=html
+
+# Run specific test file
+poetry run pytest tests/test_gmail_client.py
+```
+
+### Code Quality Tools
+
+The project uses several code quality tools:
+
+1. **Ruff** for linting and formatting:
+   ```bash
+   # Run linting
+   poetry run ruff check .
+
+   # Run formatting
+   poetry run ruff format .
+   ```
+
+2. **MyPy** for type checking:
+   ```bash
+   poetry run mypy .
+   ```
+
+3. **Pre-commit** for automated checks:
+   ```bash
+   poetry run pre-commit run --all-files
+   ```
+
+4. **Convenience scripts**:
+   ```bash
+   # Format code
+   poetry run format
+
+   # Run linting
+   poetry run lint
+
+   # Run type checking
+   poetry run typecheck
+
+   # Run all checks
+   poetry run checks
+
+   # Run tests
+   poetry run test
+   ```
+
+### Contribution Workflow
+
+1. Create a new branch for your feature or fix:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. Make your changes and ensure all tests pass:
+   ```bash
+   poetry run checks
+   poetry run test
+   ```
+
+3. Commit your changes with a descriptive message:
+   ```bash
+   git add .
+   git commit -S -m "Add detailed description of all changes"
+   ```
+
+4. Push your branch to GitHub:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+5. Create a pull request using GitHub CLI:
+   ```bash
+   gh pr create --title "Your PR title" --body "Description of your changes"
+   ```
 
 ### Signed Commits
 
@@ -168,3 +347,7 @@ To set up signed commits:
    ```bash
    git commit -S -m "Your commit message"
    ```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
