@@ -63,31 +63,31 @@ function logToConsole(message, type = 'info') {
     }
 }
 
-// Google Sign-In callback function (must be in global scope)
+// Function to handle Google Sign-In response
 function handleGoogleSignIn(response) {
     logToConsole('Google Sign-In response received', 'info');
 
-    // The response contains a credential with the ID token
     if (response && response.credential) {
-        const credential = response.credential;
-        logToConsole('Credential received, exchanging for Gmail access', 'info');
+        logToConsole('Credential received, exchanging for access token', 'info');
 
-        // Parse the JWT to get user info
-        const userInfo = parseJwt(credential);
-
-        // Store user info in localStorage for later use
-        if (userInfo) {
-            localStorage.setItem('gmailUserInfo', JSON.stringify({
-                name: userInfo.name,
-                email: userInfo.email,
-                picture: userInfo.picture
-            }));
-        }
-
-        // Exchange the Google credential for Gmail OAuth access
-        exchangeGoogleCredential(credential);
+        // Exchange the credential for an access token
+        exchangeGoogleCredential(response.credential)
+            .then(success => {
+                if (success) {
+                    logToConsole('Successfully connected to Gmail', 'success');
+                    updateUIAfterGmailConnection(true);
+                } else {
+                    logToConsole('Failed to connect to Gmail', 'error');
+                    updateUIAfterGmailConnection(false);
+                }
+            })
+            .catch(error => {
+                logToConsole('Error exchanging credential: ' + error, 'error');
+                updateUIAfterGmailConnection(false);
+            });
     } else {
-        logToConsole('Invalid Google Sign-In response', 'error');
+        logToConsole('No credential in response', 'error');
+        updateUIAfterGmailConnection(false);
     }
 }
 
@@ -108,238 +108,236 @@ function parseJwt(token) {
     }
 }
 
-// Function to exchange Google credential for Gmail OAuth access
+// Function to exchange Google credential for Gmail access
 async function exchangeGoogleCredential(credential) {
-    try {
-        logToConsole('Sending credential to server for exchange', 'info');
+    logToConsole('Exchanging Google credential for Gmail access token', 'info');
 
-        const response = await fetch('/gmail/google-signin', {
+    try {
+        // Extract user info from the credential
+        try {
+            const payload = parseJwt(credential);
+            localStorage.setItem('gmailUserInfo', JSON.stringify({
+                name: payload.name,
+                email: payload.email,
+                picture: payload.picture
+            }));
+            logToConsole('User info stored: ' + payload.name + ' (' + payload.email + ')', 'info');
+        } catch (error) {
+            logToConsole('Error parsing JWT: ' + error, 'error');
+        }
+
+        // Exchange the credential with our backend
+        const response = await fetch('/gmail/exchange-token', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ credential }),
+            body: JSON.stringify({ credential })
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Server responded with ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
 
-        // Check if OAuth consent is required
-        if (data.requires_oauth_consent) {
-            logToConsole(`Redirecting to Google OAuth consent for ${data.email}`, 'info');
-            // Redirect to the authorization URL
-            window.location.href = data.auth_url;
-            return;
-        }
-
-        // If we have an access token, store it and update UI
         if (data.access_token) {
-            localStorage.setItem('gmailAccessToken', data.access_token);
-            updateUIAfterGmailConnection(true);
+            logToConsole('Received access token from server', 'success');
+            localStorage.setItem('gmailToken', data.access_token);
 
-            // Log success
-            logToConsole('Successfully connected to Gmail', 'success');
+            if (data.refresh_token) {
+                localStorage.setItem('gmailRefreshToken', data.refresh_token);
+                logToConsole('Refresh token stored', 'info');
+            }
+
+            return true;
         } else {
-            throw new Error('No access token received');
+            logToConsole('No access token in response', 'error');
+            return false;
         }
     } catch (error) {
-        logToConsole(`Error connecting to Gmail: ${error.message}`, 'error');
-        updateUIAfterGmailConnection(false);
+        logToConsole('Error exchanging credential: ' + error, 'error');
+        return false;
     }
 }
 
 // Function to update UI after Gmail connection attempt
 function updateUIAfterGmailConnection(success) {
-    const connectDestinationBtn = document.getElementById('connectDestination');
-    const googleSignInBtn = document.querySelector('.g_id_signin');
-    const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-
     if (success) {
+        // Update the Gmail auth button
+        updateGmailAuthButton();
+
+        // Enable destination buttons
+        const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+        const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+
+        if (outlookAuthBtn) outlookAuthBtn.disabled = false;
+        if (yahooAuthBtn) yahooAuthBtn.disabled = false;
+
+        // Show destination options
+        showDestinationOptions();
+
         // Update state
         isGmailConnected = true;
-
-        // Update UI - hide the Google Sign-In button and show user profile
-        if (googleSignInBtn) {
-            const container = document.getElementById('googleSignInButtonContainer');
-            googleSignInBtn.style.display = 'none';
-        }
-
-        // Update the direct Gmail auth button if it exists
-        if (directGmailAuthBtn) {
-            updateGmailAuthButton();
-        }
-
-        // Get user info from localStorage
-        const userInfoString = localStorage.getItem('gmailUserInfo');
-
-        if (userInfoString) {
-            try {
-                const userInfo = JSON.parse(userInfoString);
-
-                // Create user profile element
-                const userProfile = document.createElement('div');
-                userProfile.className = 'user-profile';
-
-                // Build profile HTML with user info
-                userProfile.innerHTML = `
-                    <img src="${userInfo.picture}" alt="Profile" class="user-profile-image">
-                    <div class="user-profile-info">
-                        <div class="user-profile-name">${userInfo.name}</div>
-                        <div class="user-profile-email">${userInfo.email}</div>
-                    </div>
-                    <div class="connection-status">
-                        <span class="checkmark">✓</span> Connected
-                    </div>
-                `;
-
-                container.appendChild(userProfile);
-        } catch (error) {
-                // If there's an error parsing user info, fall back to basic success indicator
-                const successIndicator = document.createElement('div');
-                successIndicator.className = 'success-indicator';
-                successIndicator.innerHTML = '<span class="checkmark">✓</span> Connected to Gmail';
-                container.appendChild(successIndicator);
-            }
-        } else {
-            // No user info available, show basic success indicator
-            const successIndicator = document.createElement('div');
-            successIndicator.className = 'success-indicator';
-            successIndicator.innerHTML = '<span class="checkmark">✓</span> Connected to Gmail';
-            container.appendChild(successIndicator);
-        }
-
-        // Enable destination selection
-        if (connectDestinationBtn) {
-            connectDestinationBtn.disabled = false;
-        }
     } else {
-        // Update state
-        isGmailConnected = false;
-
-        // Update UI to show an error state
-        if (googleSignInBtn) {
-            const container = document.getElementById('googleSignInButtonContainer');
+        // Show error message
+        const gmailAuthContainer = document.getElementById('googleSignInButtonContainer');
+        if (gmailAuthContainer) {
             const errorMessage = document.createElement('div');
             errorMessage.className = 'error-message';
-            errorMessage.textContent = 'Connection failed. Please try again.';
-            container.appendChild(errorMessage);
+            errorMessage.textContent = 'Failed to connect to Gmail. Please try again.';
+            gmailAuthContainer.appendChild(errorMessage);
+
+            // Remove the error message after 5 seconds
+            setTimeout(() => {
+                if (errorMessage.parentNode === gmailAuthContainer) {
+                    gmailAuthContainer.removeChild(errorMessage);
+                }
+            }, 5000);
         }
+
+        // Clear any stored tokens
+        localStorage.removeItem('gmailToken');
+        localStorage.removeItem('gmailRefreshToken');
+        localStorage.removeItem('gmailUserInfo');
+
+        // Update the Gmail auth button
+        updateGmailAuthButton();
     }
 }
 
-// Function to update the Gmail Auth button to show user info
+// Function to update the Gmail auth button based on authentication state
 function updateGmailAuthButton() {
-    console.log('updateGmailAuthButton called');
-    const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-    if (!directGmailAuthBtn) {
-        console.error('directGmailAuthBtn not found in DOM');
+    logToConsole('Updating Gmail auth button', 'info');
+    const gmailAuthContainer = document.getElementById('googleSignInButtonContainer');
+
+    if (!gmailAuthContainer) {
+        logToConsole('Gmail auth container not found', 'error');
         return;
     }
 
-    console.log('Found directGmailAuthBtn element:', directGmailAuthBtn);
+    // Clear any existing content in the container
+    gmailAuthContainer.innerHTML = '';
 
-    // Get user info from localStorage
-    const userInfoString = localStorage.getItem('gmailUserInfo');
+    // Check if we have a Gmail token
     const gmailToken = localStorage.getItem('gmailToken');
+    const userInfoStr = localStorage.getItem('gmailUserInfo');
 
-    console.log('gmailToken exists:', !!gmailToken);
-    console.log('userInfoString exists:', !!userInfoString);
-
-    if (gmailToken) {
+    if (gmailToken && userInfoStr) {
         try {
-            // If we have user info, parse it and use it
-            let userInfo = { name: 'Gmail User', email: 'gmail@user.com', picture: '' };
-            if (userInfoString) {
-                try {
-                    userInfo = JSON.parse(userInfoString);
-                    console.log('Parsed user info:', JSON.stringify(userInfo, null, 2));
-                    console.log('Profile picture URL:', userInfo.picture);
-                } catch (e) {
-                    console.error('Error parsing user info:', e);
-                }
-            } else {
-                console.log('No user info found, using default values');
-            }
+            const userInfo = JSON.parse(userInfoStr);
+            logToConsole('User info found: ' + JSON.stringify(userInfo), 'info');
 
-            // Using Apple HIG styled button with Google aesthetics
-            console.log('Updating button HTML with user info');
+            // Create a custom button that matches Microsoft and Yahoo buttons
+            const button = document.createElement('button');
+            button.className = 'microsoft-auth-button'; // Reuse Microsoft button style for consistency
+            button.style.display = 'flex';
+            button.style.alignItems = 'center';
+            button.style.justifyContent = 'center';
+            button.style.width = '100%';
+            button.style.padding = '10px 16px';
+            button.style.backgroundColor = '#fff';
+            button.style.color = '#5e5e5e';
+            button.style.border = '1px solid #8c8c8c';
+            button.style.borderRadius = '4px';
+            button.style.fontSize = '14px';
+            button.style.fontWeight = '500';
+            button.style.cursor = 'pointer';
+            button.style.marginBottom = '12px';
+            button.style.height = '40px';
 
-            // Determine avatar content - use picture if available, otherwise first letter of name
-            let avatarContent = '';
-            if (userInfo.picture && userInfo.picture.trim() !== '') {
-                console.log('Using profile picture for avatar');
-                avatarContent = `<img src="${userInfo.picture}" alt="Profile" />`;
-            } else {
-                console.log('Using first letter as avatar:', userInfo.name ? userInfo.name.charAt(0).toUpperCase() : 'G');
-                avatarContent = userInfo.name ? userInfo.name.charAt(0).toUpperCase() : 'G';
-            }
-
-            // Log the final HTML we're going to use
-            const newButtonHTML = `
-                <div class="auth-button-content">
-                    <span class="user-avatar">${avatarContent}</span>
-                    <span class="auth-button-text">${userInfo.email || 'Gmail User'}</span>
-                </div>
+            // Create the button content
+            button.innerHTML = `
+                <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon" style="width: 20px; height: 20px; margin-right: 10px;">
+                <span>${userInfo.email}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" style="position: absolute; right: 12px;">
+                    <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
+                </svg>
             `;
-            console.log('New button HTML:', newButtonHTML);
 
-            // Update the button HTML
-            directGmailAuthBtn.innerHTML = newButtonHTML;
-            console.log('Button HTML updated');
+            // Add click event to disconnect
+            button.addEventListener('click', disconnectGmail);
 
-            // Update button styling
-            directGmailAuthBtn.classList.add('connected');
+            // Add the button to the container
+            gmailAuthContainer.appendChild(button);
 
-            // We no longer need to set onclick here since we have a global event listener
-            // that handles both connected and disconnected states
+            // Enable the destination connection buttons
+            const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+            const yahooAuthBtn = document.getElementById('yahooAuthBtn');
 
-            // Enable the destination connection button
-            const connectDestinationBtn = document.getElementById('connectDestination');
-            if (connectDestinationBtn) {
-                connectDestinationBtn.disabled = false;
-            }
+            if (outlookAuthBtn) outlookAuthBtn.disabled = false;
+            if (yahooAuthBtn) yahooAuthBtn.disabled = false;
 
-            logToConsole('Updated Gmail auth button with user info', 'info');
-        } catch (e) {
-            console.error('Error updating Gmail auth button:', e);
+            // Update state
+            isGmailConnected = true;
+
+            // Show destination options
+            showDestinationOptions();
+
+        } catch (error) {
+            logToConsole('Error parsing user info: ' + error, 'error');
+            disconnectGmail();
         }
     } else {
-        console.log('No Gmail token found, button not updated');
+        // Not connected, create a new Google Sign-In button that matches other buttons
+        const button = document.createElement('button');
+        button.className = 'microsoft-auth-button'; // Reuse Microsoft button style for consistency
+        button.style.display = 'flex';
+        button.style.alignItems = 'center';
+        button.style.justifyContent = 'center';
+        button.style.width = '100%';
+        button.style.padding = '10px 16px';
+        button.style.backgroundColor = '#fff';
+        button.style.color = '#5e5e5e';
+        button.style.border = '1px solid #8c8c8c';
+        button.style.borderRadius = '4px';
+        button.style.fontSize = '14px';
+        button.style.fontWeight = '500';
+        button.style.cursor = 'pointer';
+        button.style.marginBottom = '12px';
+        button.style.height = '40px';
+
+        // Create the button content
+        button.innerHTML = `
+            <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon" style="width: 20px; height: 20px; margin-right: 10px;">
+            <span>Sign in with Google</span>
+        `;
+
+        // Add click event to initiate Google sign-in
+        button.addEventListener('click', async function() {
+            const url = await getGmailOAuthUrl();
+            if (url) {
+                window.location.href = url;
+            }
+        });
+
+        // Add the button to the container
+        gmailAuthContainer.appendChild(button);
     }
 }
 
 // Function to disconnect from Gmail
 function disconnectGmail() {
+    logToConsole('Disconnecting from Gmail', 'info');
+
     // Clear tokens and user info
     localStorage.removeItem('gmailToken');
+    localStorage.removeItem('gmailRefreshToken');
     localStorage.removeItem('gmailUserInfo');
 
-    // Reset the button
-    const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-    if (directGmailAuthBtn) {
-        directGmailAuthBtn.innerHTML = `
-            <div class="auth-button-content">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" class="auth-button-icon">
-                <span class="auth-button-text">Sign in with Google</span>
-            </div>
-        `;
-        directGmailAuthBtn.classList.remove('connected');
-        // We no longer need to set onclick here since we have a global event listener
-    }
+    // Update the UI
+    updateGmailAuthButton();
 
-    // Disable the destination connection button
-    const connectDestinationBtn = document.getElementById('connectDestination');
-    if (connectDestinationBtn) {
-        connectDestinationBtn.disabled = true;
-    }
+    // Disable destination buttons
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+
+    if (outlookAuthBtn) outlookAuthBtn.disabled = true;
+    if (yahooAuthBtn) yahooAuthBtn.disabled = true;
 
     // Update state
     isGmailConnected = false;
-
-    logToConsole('Disconnected from Gmail', 'info');
 }
 
 // Function to get Gmail OAuth URL
@@ -388,31 +386,71 @@ function showDestinationOptions() {
 
 // Function to initialize the application
 function initializeApp() {
-    console.log('Initializing application');
+    logToConsole('Initializing application', 'info');
 
-    // Check if we have a Gmail token
+    // Disable destination buttons by default
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+
+    if (outlookAuthBtn) outlookAuthBtn.disabled = true;
+    if (yahooAuthBtn) yahooAuthBtn.disabled = true;
+
+    // Check if we have a Gmail token and enable destination buttons if we do
     const gmailToken = localStorage.getItem('gmailToken');
-    console.log('Token in localStorage:', !!gmailToken);
     if (gmailToken) {
-        console.log('Found gmail token:', gmailToken.substring(0, 10) + '...');
-
-        // Also log any user info we have
-        const userInfoString = localStorage.getItem('gmailUserInfo');
-        console.log('User info in localStorage:', !!userInfoString);
-        if (userInfoString) {
-            try {
-                const userInfo = JSON.parse(userInfoString);
-                console.log('User info parsed:', userInfo);
-            } catch (e) {
-                console.error('Failed to parse user info:', e);
-            }
-        }
+        if (outlookAuthBtn) outlookAuthBtn.disabled = false;
+        if (yahooAuthBtn) yahooAuthBtn.disabled = false;
     }
 
-    // Update UI based on authentication status
-    updateUIBasedOnAuthentication();
+    // Initialize the Gmail auth button
+    updateGmailAuthButton();
 
-    console.log('Application initialization complete');
+    // Initialize destination selection
+    initializeDestinationSelection();
+
+    // Initialize modals
+    initializeModals();
+
+    // Handle OAuth callback if present in URL
+    handleOAuthCallback();
+
+    // Initialize migration options
+    initializeMigration();
+
+    // Initialize advanced options toggle
+    const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+    const advancedOptions = document.getElementById('advancedOptions');
+
+    if (advancedOptionsToggle && advancedOptions) {
+        advancedOptionsToggle.addEventListener('click', function() {
+            advancedOptions.style.display = advancedOptions.style.display === 'block' ? 'none' : 'block';
+            const chevron = advancedOptionsToggle.querySelector('.chevron');
+            if (chevron) {
+                chevron.style.transform = advancedOptions.style.display === 'block' ? 'rotate(180deg)' : 'rotate(0)';
+            }
+        });
+    }
+
+    // Initialize batch size slider
+    const batchSizeSlider = document.getElementById('batchSizeSlider');
+    const batchSizeValue = document.getElementById('batchSizeValue');
+    const batchProcessingCheckbox = document.getElementById('batchProcessing');
+    const batchSizeContainer = document.getElementById('batchSizeContainer');
+
+    if (batchSizeSlider && batchSizeValue) {
+        batchSizeSlider.addEventListener('input', function() {
+            batchSizeValue.textContent = this.value + ' emails';
+        });
+    }
+
+    if (batchProcessingCheckbox && batchSizeContainer) {
+        batchProcessingCheckbox.addEventListener('change', function() {
+            batchSizeContainer.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+
+    // Load OAuth settings from localStorage if available
+    loadOAuthSettings();
 }
 
 // Document ready event
@@ -649,6 +687,25 @@ document.addEventListener('DOMContentLoaded', () => {
             migrationLog.innerHTML = '';
         }
     }
+
+    // Advanced Options Toggle
+    const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+    const advancedOptions = document.getElementById('advancedOptions');
+    if (advancedOptionsToggle && advancedOptions) {
+        const chevron = advancedOptionsToggle.querySelector('.chevron');
+
+        advancedOptionsToggle.addEventListener('click', function() {
+            advancedOptions.classList.toggle('open');
+            chevron.classList.toggle('open');
+        });
+    }
+
+    // Handle destination provider selection
+    initializeDestinationSelection();
+
+    // Make connectToOutlook and connectToYahoo available globally
+    window.connectToOutlook = connectToOutlook;
+    window.connectToYahoo = connectToYahoo;
 });
 
 // Function to initialize modal dialogs
@@ -755,4 +812,97 @@ function handleOAuthCallback() {
     } else {
         console.log('No OAuth callback parameters found in URL');
     }
+}
+
+// Function to handle destination provider selection
+function initializeDestinationSelection() {
+    console.log('Initializing destination selection');
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+    const outlookAuthSection = document.getElementById('outlookAuthSection');
+    const yahooAuthSection = document.getElementById('yahooAuthSection');
+
+    console.log('Outlook auth button found:', !!outlookAuthBtn);
+    console.log('Yahoo auth button found:', !!yahooAuthBtn);
+    console.log('Outlook auth section found:', !!outlookAuthSection);
+    console.log('Yahoo auth section found:', !!yahooAuthSection);
+
+    if (!outlookAuthBtn || !yahooAuthBtn) {
+        console.error('Destination auth buttons not found');
+        return;
+    }
+
+    // Add click event listeners to auth buttons
+    outlookAuthBtn.addEventListener('click', function(e) {
+        // Prevent default to handle the auth flow ourselves
+        e.preventDefault();
+
+        const provider = this.getAttribute('data-provider');
+        console.log('Outlook auth button clicked, provider:', provider);
+
+        // Store selected provider
+        localStorage.setItem('selectedDestinationProvider', 'outlook');
+        console.log('Provider saved to localStorage: outlook');
+
+        // Call the connect function directly
+        connectToOutlook();
+    });
+
+    yahooAuthBtn.addEventListener('click', function(e) {
+        // Prevent default to handle the auth flow ourselves
+        e.preventDefault();
+
+        const provider = this.getAttribute('data-provider');
+        console.log('Yahoo auth button clicked, provider:', provider);
+
+        // Store selected provider
+        localStorage.setItem('selectedDestinationProvider', 'yahoo');
+        console.log('Provider saved to localStorage: yahoo');
+
+        // Call the connect function directly
+        connectToYahoo();
+    });
+
+    // Initialize the global connect functions
+    window.connectToOutlook = function() {
+        console.log('Global connectToOutlook function called');
+        // This would be implemented with actual OAuth flow
+        // For now, we'll simulate a successful connection
+
+        setTimeout(() => {
+            // Update button to show connected state
+            outlookAuthBtn.classList.add('connected');
+            outlookAuthBtn.innerHTML = `
+                <img src="/static/img/microsoft-logo.svg" alt="Microsoft Logo" class="auth-button-icon">
+                <span>Connected to Microsoft</span>
+            `;
+
+            // Enable start migration button
+            const startMigrationBtn = document.getElementById('startMigration');
+            if (startMigrationBtn) {
+                startMigrationBtn.disabled = false;
+            }
+        }, 1500);
+    };
+
+    window.connectToYahoo = function() {
+        console.log('Global connectToYahoo function called');
+        // This would be implemented with actual OAuth flow
+        // For now, we'll simulate a successful connection
+
+        setTimeout(() => {
+            // Update button to show connected state
+            yahooAuthBtn.classList.add('connected');
+            yahooAuthBtn.innerHTML = `
+                <img src="/static/img/yahoo-white-icon.svg" alt="Yahoo Logo" class="auth-button-icon">
+                <span>Connected to Yahoo</span>
+            `;
+
+            // Enable start migration button
+            const startMigrationBtn = document.getElementById('startMigration');
+            if (startMigrationBtn) {
+                startMigrationBtn.disabled = false;
+            }
+        }, 1500);
+    };
 }
