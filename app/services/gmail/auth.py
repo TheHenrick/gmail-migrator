@@ -83,7 +83,7 @@ class OAuthFlow:
                 detail=f"Error generating authorization URL: {e}",
             ) from e
 
-    def exchange_code(self, code: str) -> dict[str, str]:
+    def exchange_code(self, code: str) -> dict[str, Any]:
         """Exchange an authorization code for access and refresh tokens."""
         try:
             # Add logging for debugging
@@ -120,11 +120,7 @@ class OAuthFlow:
 
             # Check if the token request was successful
             if token_response.status_code != 200:
-                error_detail = (
-                    token_response.json()
-                    if token_response.content
-                    else {"error": "Unknown error"}
-                )
+                error_detail = token_response.json() if token_response.content else {"error": "Unknown error"}
                 logger.error(f"Token exchange failed: {error_detail}")
                 raise HTTPException(  # noqa: TRY301
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -164,15 +160,11 @@ class OAuthFlow:
         try:
             # Add debug logging
             logger = logging.getLogger(__name__)
-            logger.debug(
-                f"Starting exchange_google_credential with client_id: {self.client_id}"
-            )
+            logger.debug(f"Starting exchange_google_credential with client_id: {self.client_id}")
 
             # Verify the Google ID token
             logger.debug("Verifying Google ID token")
-            idinfo = id_token.verify_oauth2_token(
-                credential, google_requests.Request(), self.client_id
-            )
+            idinfo = id_token.verify_oauth2_token(credential, google_requests.Request(), self.client_id)
 
             # Check if the token is valid
             logger.debug(f"Token issuer: {idinfo.get('iss')}")
@@ -234,9 +226,7 @@ class OAuthFlow:
             ) from e
         except Exception as e:
             logger = logging.getLogger(__name__)
-            logger.error(
-                f"Exception in exchange_google_credential: {str(e)}", exc_info=True
-            )
+            logger.error(f"Exception in exchange_google_credential: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error processing Google Sign-In: {str(e)}",
@@ -296,11 +286,7 @@ async def exchange_code(code: str, redirect_uri: str) -> dict[str, Any]:
         token_response = requests.post(token_url, data=token_payload, timeout=10)
 
         if token_response.status_code != 200:
-            error_detail = (
-                token_response.json()
-                if token_response.content
-                else {"error": "Unknown error"}
-            )
+            error_detail = token_response.json() if token_response.content else {"error": "Unknown error"}
             logger.error(f"Token exchange failed: {error_detail}")
 
             def raise_token_error() -> NoReturn:

@@ -62,9 +62,7 @@ class OutlookClient:
             data = request_data
 
         try:
-            response = requests.request(
-                method, url, params=params, json=data, headers=headers, timeout=30
-            )
+            response = requests.request(method, url, params=params, json=data, headers=headers, timeout=30)
             response.raise_for_status()
             return response.json() if response.content else {}
         except requests.RequestException as e:
@@ -90,14 +88,10 @@ class OutlookClient:
         Returns:
             List[Dict[str, Any]]: List of mail folders
         """
-        response = self._make_request(
-            "GET", "/me/mailfolders?$top=100&$expand=childFolders"
-        )
+        response = self._make_request("GET", "/me/mailfolders?$top=100&$expand=childFolders")
         return response.get("value", [])
 
-    def create_folder(
-        self, name: str, parent_folder_id: str | None = None
-    ) -> dict[str, Any]:
+    def create_folder(self, name: str, parent_folder_id: str | None = None) -> dict[str, Any]:
         """
         Create a new mail folder.
 
@@ -110,12 +104,9 @@ class OutlookClient:
         """
         data = {"displayName": name}
 
-        if parent_folder_id:
-            endpoint = f"/me/mailfolders/{parent_folder_id}/childFolders"
-        else:
-            endpoint = "/me/mailfolders"
+        endpoint = f"/me/mailfolders/{parent_folder_id}/childFolders" if parent_folder_id else "/me/mailfolders"
 
-        return self._make_request("POST", endpoint, data=data)
+        return self._make_request("POST", endpoint, request_data=data)
 
     def get_messages(
         self,
@@ -139,20 +130,14 @@ class OutlookClient:
         params = {
             "$top": top,
             "$skip": skip,
-            "$select": (
-                "id,conversationId,subject,bodyPreview,receivedDateTime,"
-                "from,toRecipients,hasAttachments"
-            ),
+            "$select": ("id,conversationId,subject,bodyPreview,receivedDateTime," "from,toRecipients,hasAttachments"),
             "$orderby": "receivedDateTime desc",
         }
 
         if query:
             params["$search"] = query
 
-        if folder_id:
-            endpoint = f"/me/mailfolders/{folder_id}/messages"
-        else:
-            endpoint = "/me/messages"
+        endpoint = f"/me/mailfolders/{folder_id}/messages" if folder_id else "/me/messages"
 
         response = self._make_request("GET", endpoint, params=params)
         messages = response.get("value", [])
@@ -175,9 +160,7 @@ class OutlookClient:
         Returns:
             Dict[str, Any]: Message details
         """
-        return self._make_request(
-            "GET", f"/me/messages/{message_id}?$expand=attachments"
-        )
+        return self._make_request("GET", f"/me/messages/{message_id}?$expand=attachments")
 
     def get_attachment(self, message_id: str, attachment_id: str) -> dict[str, Any]:
         """
@@ -190,9 +173,7 @@ class OutlookClient:
         Returns:
             Dict[str, Any]: Attachment data
         """
-        return self._make_request(
-            "GET", f"/me/messages/{message_id}/attachments/{attachment_id}"
-        )
+        return self._make_request("GET", f"/me/messages/{message_id}/attachments/{attachment_id}")
 
     def create_message(
         self,
@@ -225,16 +206,16 @@ class OutlookClient:
         attachments = kwargs.get("attachments", [])
 
         # Format recipients
-        to_list = [{"emailAddress": {"address": email}} for email in to_recipients]
-        cc_list = [
+        to_list: list[dict[str, dict[str, str]]] = [{"emailAddress": {"address": email}} for email in to_recipients]
+        cc_list: list[dict[str, dict[str, str]]] = [
             {"emailAddress": {"address": email}} for email in (cc_recipients or [])
         ]
-        bcc_list = [
+        bcc_list: list[dict[str, dict[str, str]]] = [
             {"emailAddress": {"address": email}} for email in (bcc_recipients or [])
         ]
 
         # Create message data
-        message_data = {
+        message_data: dict[str, Any] = {
             "subject": subject,
             "body": {
                 "contentType": "html" if is_html else "text",
@@ -250,10 +231,7 @@ class OutlookClient:
             message_data["bccRecipients"] = bcc_list
 
         # Create the draft message first
-        if folder_id:
-            endpoint = f"/me/mailfolders/{folder_id}/messages"
-        else:
-            endpoint = "/me/messages"
+        endpoint = f"/me/mailfolders/{folder_id}/messages" if folder_id else "/me/messages"
 
         message = self._make_request("POST", endpoint, request_data=message_data)
         message_id = message.get("id")
@@ -261,11 +239,16 @@ class OutlookClient:
         # Add attachments if any
         if attachments and message_id:
             for attachment in attachments:
+                # Ensure content is bytes
+                content = attachment["content"]
+                if isinstance(content, str):
+                    content = content.encode("utf-8")
+
                 self.add_attachment(
                     message_id=message_id,
                     attachment_name=attachment["name"],
-                    content_bytes=attachment["content"],
-                    content_type=attachment.get("contentType"),
+                    content_bytes=content,
+                    content_type=attachment.get("contentType", "application/octet-stream"),
                 )
 
         return message
@@ -338,11 +321,7 @@ class OutlookClient:
         headers = {
             "Content-Type": "text/plain",
         }
-        endpoint = (
-            f"/me/mailfolders/{folder_id}/messages/$value"
-            if folder_id
-            else "/me/messages/$value"
-        )
+        endpoint = f"/me/mailfolders/{folder_id}/messages/$value" if folder_id else "/me/messages/$value"
 
         request_data = {"headers": headers, "data": mime_content}
 
@@ -367,9 +346,7 @@ class OutlookClient:
         """
         # Extract recipient information
         to_address = gmail_message.get("to_address", "")
-        to_recipients = (
-            [addr.strip() for addr in to_address.split(",")] if to_address else []
-        )
+        to_recipients = [addr.strip() for addr in to_address.split(",")] if to_address else []
 
         # Extract subject and body
         subject = gmail_message.get("subject", "")

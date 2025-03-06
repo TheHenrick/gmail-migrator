@@ -33,7 +33,9 @@ class GmailClient:
     """Client for interfacing with the Gmail API."""
 
     def __init__(
-        self, credentials: dict[str, Any] | None = None, credentials_path: str = None
+        self,
+        credentials: dict[str, Any] | None = None,
+        credentials_path: str | None = None,
     ) -> None:
         """
         Initialize the Gmail client.
@@ -47,7 +49,7 @@ class GmailClient:
         self.service = None
         self.request_count = 0
         self.requests_per_minute = settings.RATE_LIMIT_REQUESTS
-        self._last_request_time = 0
+        self._last_request_time = 0.0
 
     def authenticate(self) -> dict[str, Any]:
         """
@@ -62,9 +64,7 @@ class GmailClient:
                 return self.credentials
 
             # Create a flow instance with client secrets
-            flow = InstalledAppFlow.from_client_secrets_file(
-                self.credentials_path, GMAIL_SCOPES
-            )
+            flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, GMAIL_SCOPES)
 
             # Run the OAuth flow
             credentials = flow.run_local_server(port=0)
@@ -119,9 +119,7 @@ class GmailClient:
         # Update last request time
         self._last_request_time = time.time()
 
-    def get_email_list(
-        self, query: str = "", max_results: int = 100, page_token: str | None = None
-    ) -> dict[str, Any]:
+    def get_email_list(self, query: str = "", max_results: int = 100, page_token: str | None = None) -> dict[str, Any]:
         """
         Get a list of emails matching the query.
 
@@ -138,6 +136,10 @@ class GmailClient:
 
             if not self.service:
                 self._build_service()
+
+            if not self.service:
+                logger.error("Failed to build Gmail service")
+                return {"messages": [], "next_page_token": None}
 
             # Execute the Gmail API request
             result = (
@@ -164,9 +166,7 @@ class GmailClient:
             logger.exception("Error fetching emails")
             return {"messages": [], "next_page_token": None}
 
-    def get_email_batches(
-        self, query: str = "", batch_size: int = 100
-    ) -> Generator[list[dict[str, Any]], None, None]:
+    def get_email_batches(self, query: str = "", batch_size: int = 100) -> Generator[list[dict[str, Any]], None, None]:
         """
         Get batches of emails using pagination.
 
@@ -179,9 +179,7 @@ class GmailClient:
         """
         page_token = None
         while True:
-            result = self.get_email_list(
-                query=query, max_results=batch_size, page_token=page_token
-            )
+            result = self.get_email_list(query=query, max_results=batch_size, page_token=page_token)
             messages = result.get("messages", [])
 
             if not messages:
@@ -212,13 +210,12 @@ class GmailClient:
             if not self.service:
                 self._build_service()
 
+            if not self.service:
+                logger.error("Failed to build Gmail service")
+                return {}
+
             # Get the full message
-            result = (
-                self.service.users()
-                .messages()
-                .get(userId="me", id=message_id)
-                .execute()
-            )
+            result = self.service.users().messages().get(userId="me", id=message_id).execute()
 
             return self.parse_email_content(result)
         except HttpError:
@@ -241,6 +238,10 @@ class GmailClient:
 
             if not self.service:
                 self._build_service()
+
+            if not self.service:
+                logger.error("Failed to build Gmail service")
+                return None
 
             # Get the attachment
             attachment = (
@@ -310,15 +311,11 @@ class GmailClient:
                 mime_type = payload.get("mimeType", "")
                 if "data" in payload["body"]:
                     body_data = payload["body"]["data"]
-                    decoded_text = base64.urlsafe_b64decode(body_data).decode(
-                        "utf-8", errors="replace"
-                    )
+                    decoded_text = base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
                     email_data["body"]["plain"] = decoded_text
                 elif "text/html" in mime_type and "data" in payload["body"]:
                     body_data = payload["body"]["data"]
-                    decoded_html = base64.urlsafe_b64decode(body_data).decode(
-                        "utf-8", errors="replace"
-                    )
+                    decoded_html = base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
                     email_data["body"]["html"] = decoded_html
 
         return email_data

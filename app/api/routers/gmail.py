@@ -131,9 +131,7 @@ async def list_emails(
         List of email metadata
     """
     try:
-        result = gmail_client.get_email_list(
-            query=query, max_results=max_results, page_token=page_token
-        )
+        result = gmail_client.get_email_list(query=query, max_results=max_results, page_token=page_token)
 
         # Get full content for each message
         messages = []
@@ -169,9 +167,7 @@ async def list_emails(
 
 
 @router.get("/emails/{email_id}", response_model=dict)
-async def get_email(
-    email_id: str, gmail_client: Annotated[GmailClient, Depends(get_gmail_client)]
-) -> dict:
+async def get_email(email_id: str, gmail_client: Annotated[GmailClient, Depends(get_gmail_client)]) -> dict:
     """
     Get detailed content of a specific email.
 
@@ -256,7 +252,7 @@ async def google_signin(request: GoogleSignInRequest) -> dict[str, Any]:
 @router.get("/auth-url", response_model=dict[str, str])
 @router.post("/auth-url", response_model=dict[str, str])
 async def get_auth_url(
-    config: OAuthConfig = None,
+    config: OAuthConfig | None = None,
 ) -> dict[str, str]:
     """Get the OAuth authentication URL for Gmail."""
     try:
@@ -356,9 +352,7 @@ async def fetch_user_profile(access_token: str) -> str:
             # If not successful response
             error_msg = f"Failed to fetch user profile: {response.status_code}"
             logger.error(error_msg)
-            return json.dumps(
-                {"name": "Gmail User", "email": "gmail@user.com", "picture": ""}
-            )
+            return json.dumps({"name": "Gmail User", "email": "gmail@user.com", "picture": ""})
     except Exception as e:
         logger.exception("Error fetching user profile")
         raise_server_error("Failed to fetch user profile", e)

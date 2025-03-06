@@ -104,7 +104,7 @@ async def get_auth_url(
             )
 
         # Get the authorization URL
-        auth_url = flow_instance.get_authorization_url()
+        auth_url = flow_instance.get_auth_url()
 
         return {"auth_url": auth_url}
     except Exception as e:
@@ -131,7 +131,16 @@ async def auth_callback(
             )
 
         # Exchange the authorization code for credentials
-        return flow_instance.exchange_code(code)
+        token_data = flow_instance.get_token_from_code(code)
+
+        # Convert to OAuthCredentialsResponse
+        return OAuthCredentialsResponse(
+            access_token=token_data.get("access_token", ""),
+            refresh_token=token_data.get("refresh_token"),
+            expires_in=token_data.get("expires_in", 0),
+            token_type=token_data.get("token_type", "Bearer"),
+            scope=token_data.get("scope", ""),
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -233,22 +242,22 @@ async def migrate_email(
     """
     try:
         # Get the email from Gmail
-        gmail_email = gmail_client.get_email(email_id)
+        gmail_email = gmail_client.get_email_content(email_id)
 
         # Get any attachments
         attachments = []
         if gmail_email.get("has_attachments", False):
             for attachment in gmail_email.get("attachments", []):
-                attachment_data = gmail_client.get_attachment(
-                    email_id, attachment["id"]
-                )
-                attachments.append(
-                    {
-                        "name": attachment_data.get("filename", "attachment.dat"),
-                        "content": attachment_data.get("data", b""),
-                        "contentType": attachment_data.get("mime_type"),
-                    }
-                )
+                attachment_data = gmail_client.get_attachment(email_id, attachment["id"])
+                if attachment_data is not None:
+                    content_type = attachment.get("mime_type", "application/octet-stream")
+                    attachments.append(
+                        {
+                            "name": attachment.get("filename", "attachment.dat"),
+                            "content": attachment_data,
+                            "contentType": content_type,
+                        }
+                    )
 
         # Migrate to Outlook
         migrated_email = outlook_client.migrate_email(
@@ -291,7 +300,7 @@ async def batch_migrate(
     Returns:
         Dict[str, Any]: Migration results
     """
-    results = {
+    results: dict[str, Any] = {
         "total": len(email_ids),
         "successful": 0,
         "failed": 0,
@@ -301,22 +310,22 @@ async def batch_migrate(
     for email_id in email_ids:
         try:
             # Get the email from Gmail
-            gmail_email = gmail_client.get_email(email_id)
+            gmail_email = gmail_client.get_email_content(email_id)
 
             # Get any attachments
             attachments = []
             if gmail_email.get("has_attachments", False):
                 for attachment in gmail_email.get("attachments", []):
-                    attachment_data = gmail_client.get_attachment(
-                        email_id, attachment["id"]
-                    )
-                    attachments.append(
-                        {
-                            "name": attachment_data.get("filename", "attachment.dat"),
-                            "content": attachment_data.get("data", b""),
-                            "contentType": attachment_data.get("mime_type"),
-                        }
-                    )
+                    attachment_data = gmail_client.get_attachment(email_id, attachment["id"])
+                    if attachment_data is not None:
+                        content_type = attachment.get("mime_type", "application/octet-stream")
+                        attachments.append(
+                            {
+                                "name": attachment.get("filename", "attachment.dat"),
+                                "content": attachment_data,
+                                "contentType": content_type,
+                            }
+                        )
 
             # Migrate to Outlook
             outlook_client.migrate_email(
@@ -325,11 +334,12 @@ async def batch_migrate(
                 folder_id=folder_id,
             )
 
-            results["successful"] += 1
+            results["successful"] = results["successful"] + 1
 
         except Exception:
             logger.exception(f"Error migrating email {email_id}")
-            results["failed"] += 1
-            results["failed_ids"].append(email_id)
+            results["failed"] = results["failed"] + 1
+            if "failed_ids" in results:
+                results["failed_ids"].append(email_id)
 
     return results

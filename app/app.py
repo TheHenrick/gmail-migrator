@@ -1,6 +1,7 @@
 """Main application factory for the FastAPI app."""
 
 import logging
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,9 +52,6 @@ def create_app(testing: bool = False) -> FastAPI:
 
     # For testing compatibility
     if testing:
-        # Add test_client method for pytest compatibility with Flask-style tests
-        app.test_client = lambda: app.test_client_class(app)
-
         # Simple TestClient class for Flask-style tests
         class TestClientClass:
             def __init__(self, app: FastAPI) -> None:
@@ -62,16 +60,21 @@ def create_app(testing: bool = False) -> FastAPI:
             def __call__(self, _app: FastAPI) -> "TestClientClass":  # noqa: ARG002
                 return self
 
-            # Ignoring return type and kwargs type annotation per project's ruff config
-            def get(self, path: str, **kwargs):  # noqa: ANN003, ANN202
+            def get(self, path: str, **kwargs: Any) -> Any:  # noqa: ANN401
                 with TestClient(self.app) as client:
                     return client.get(path, **kwargs)
 
-        app.test_client_class = TestClientClass
+        # Add test_client method for pytest compatibility with Flask-style tests
+        test_client_class_instance = TestClientClass(app)
+        # Add attributes for testing compatibility
+        app.test_client_class = TestClientClass  # type: ignore
+        app.test_client = lambda: test_client_class_instance  # type: ignore
 
     return app
 
 
 if __name__ == "__main__":
+    import uvicorn
+
     app = create_app()
-    app.run(debug=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104
