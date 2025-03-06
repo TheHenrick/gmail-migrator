@@ -1,0 +1,41 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        poetry install
+
+    - name: Run unit tests
+      run: |
+        poetry run pytest -v -m unit --cov=app --cov-report=xml:coverage-unit.xml
+
+    - name: Upload unit test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-unit.xml
+        flags: unit
+        name: unit-tests
+        fail_ci_if_error: false

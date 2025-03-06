@@ -93,6 +93,7 @@ ignore = [
     "S105",   # Allow hardcoded test credentials
     "S106",   # Allow hardcoded passwords in arguments for tests
     "PLR2004", # Allow magic numbers in tests
+    "PLR0913", # Allow too many arguments in function definition in tests
     "RET504",  # Allow redundant variable assignments in tests
     "ARG001",  # Allow unused function arguments in tests (fixtures)
     "PTH103",  # Allow os.makedirs
@@ -157,8 +158,17 @@ disallow_incomplete_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+python_classes = "Test*"
 python_functions = "test_*"
-addopts = "--cov=app --cov-report=term --cov-report=html"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow running tests",
+    "auth: Authentication-related tests",
+    "outlook: Outlook-related tests",
+    "gmail: Gmail-related tests",
+]
+addopts = "--cov=app --cov-report=term-missing"
 
 [build-system]
 requires = ["poetry-core"]

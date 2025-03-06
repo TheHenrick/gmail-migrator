@@ -1,6 +1,8 @@
 # Gmail Migrator
 
-[![CI](https://github.com/TheHenrick/gmail-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/ci.yml)
+[![CI](https://github.com/TheHenrick/gmail-migrator/actions/workflows/main.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/main.yml)
+[![Unit Tests](https://github.com/TheHenrick/gmail-migrator/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/unit-tests.yml)
+[![Integration Tests](https://github.com/TheHenrick/gmail-migrator/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/integration-tests.yml)
 [![Pre-commit](https://github.com/TheHenrick/gmail-migrator/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/pre-commit.yml)
 [![Docker Compose Test](https://github.com/TheHenrick/gmail-migrator/actions/workflows/docker-compose-test.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/docker-compose-test.yml)
 [![Signed Commits](https://github.com/TheHenrick/gmail-migrator/actions/workflows/verify-commit-signature.yml/badge.svg)](https://github.com/TheHenrick/gmail-migrator/actions/workflows/verify-commit-signature.yml)
@@ -246,8 +248,65 @@ poetry run pytest
 poetry run pytest --cov=app --cov-report=term --cov-report=html
 
 # Run specific test file
-poetry run pytest tests/test_gmail_client.py
+poetry run pytest tests/services/outlook/test_client.py
+
+# Run tests by marker
+poetry run pytest -m unit  # Run only unit tests
+poetry run pytest -m integration  # Run only integration tests
+poetry run pytest -m outlook  # Run only Outlook-related tests
+poetry run pytest -m gmail  # Run only Gmail-related tests
+poetry run pytest -m auth  # Run only authentication-related tests
 ```
+
+### GitHub Workflows
+
+The project includes several GitHub workflows for continuous integration:
+
+- **CI**: Runs all tests and linting checks on every push and pull request
+- **Unit Tests**: Runs only unit tests with coverage reporting
+- **Integration Tests**: Runs only integration tests with coverage reporting
+- **Pre-commit**: Verifies that pre-commit hooks pass
+- **Docker Compose Test**: Tests the Docker Compose setup
+- **Signed Commits**: Verifies that commits are properly signed
+
+These workflows help ensure code quality and prevent regressions when changes are made to the codebase.
+
+### Test Structure
+
+The tests are organized as follows:
+
+- `tests/services/`: Unit tests for service modules
+  - `tests/services/outlook/`: Tests for Outlook service modules (auth, client)
+  - `tests/services/gmail/`: Tests for Gmail service modules
+- `tests/api/`: Tests for API endpoints
+  - `tests/api/routers/`: Tests for API routers (outlook.py, gmail.py)
+- `tests/integration/`: Integration tests that test multiple components together
+- `tests/conftest.py`: Common test fixtures
+- `pytest.ini`: Test configuration
+
+#### Outlook Tests
+
+The Outlook tests cover:
+
+1. **Authentication**: Tests for the `OutlookAuthManager` class in `tests/services/outlook/test_auth.py`
+   - OAuth flow
+   - Token acquisition and refresh
+   - Error handling
+
+2. **Client**: Tests for the `OutlookClient` class in `tests/services/outlook/test_client.py`
+   - API requests
+   - Folder management
+   - Email operations
+   - Migration functionality
+
+3. **API Routes**: Tests for the Outlook API endpoints in `tests/api/routers/test_outlook.py`
+   - Authentication endpoints
+   - Folder management endpoints
+   - Email migration endpoints
+
+4. **Integration**: End-to-end tests in `tests/integration/test_outlook_integration.py`
+   - Complete migration flows
+   - Authentication and folder management
 
 ### Code Quality Tools
 

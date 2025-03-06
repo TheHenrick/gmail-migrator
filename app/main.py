@@ -19,9 +19,21 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("app.log"),
     ],
 )
+
+# Only add file handler if not in testing mode
+if "pytest" not in sys.modules:
+    try:
+        log_file = Path("app.log")
+        # Create log directory if it doesn't exist
+        log_file.parent.mkdir(exist_ok=True)
+        # Add file handler
+        file_handler = logging.FileHandler(log_file)
+        logging.getLogger().addHandler(file_handler)
+    except (OSError, PermissionError) as e:
+        logging.warning(f"Could not set up file logging: {e}")
+
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
