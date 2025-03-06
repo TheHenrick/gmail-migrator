@@ -231,27 +231,13 @@ function updateGmailAuthButton() {
 
             // Create a custom button that matches Microsoft and Yahoo buttons
             const button = document.createElement('button');
-            button.className = 'microsoft-auth-button'; // Reuse Microsoft button style for consistency
-            button.style.display = 'flex';
-            button.style.alignItems = 'center';
-            button.style.justifyContent = 'center';
-            button.style.width = '100%';
-            button.style.padding = '10px 16px';
-            button.style.backgroundColor = '#fff';
-            button.style.color = '#5e5e5e';
-            button.style.border = '1px solid #8c8c8c';
-            button.style.borderRadius = '4px';
-            button.style.fontSize = '14px';
-            button.style.fontWeight = '500';
-            button.style.cursor = 'pointer';
-            button.style.marginBottom = '12px';
-            button.style.height = '40px';
+            button.className = 'google-auth-button'; // Use our new dedicated class
 
             // Create the button content
             button.innerHTML = `
-                <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon" style="width: 20px; height: 20px; margin-right: 10px;">
-                <span>${userInfo.email}</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" style="position: absolute; right: 12px;">
+                <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon">
+                <span style="flex: 1;">${userInfo.email}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" class="logout-icon">
                     <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
                 </svg>
             `;
@@ -282,25 +268,11 @@ function updateGmailAuthButton() {
     } else {
         // Not connected, create a new Google Sign-In button that matches other buttons
         const button = document.createElement('button');
-        button.className = 'microsoft-auth-button'; // Reuse Microsoft button style for consistency
-        button.style.display = 'flex';
-        button.style.alignItems = 'center';
-        button.style.justifyContent = 'center';
-        button.style.width = '100%';
-        button.style.padding = '10px 16px';
-        button.style.backgroundColor = '#fff';
-        button.style.color = '#5e5e5e';
-        button.style.border = '1px solid #8c8c8c';
-        button.style.borderRadius = '4px';
-        button.style.fontSize = '14px';
-        button.style.fontWeight = '500';
-        button.style.cursor = 'pointer';
-        button.style.marginBottom = '12px';
-        button.style.height = '40px';
+        button.className = 'google-auth-button'; // Use our new dedicated class
 
         // Create the button content
         button.innerHTML = `
-            <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon" style="width: 20px; height: 20px; margin-right: 10px;">
+            <img src="/static/img/google-logo.svg" alt="Google Logo" class="auth-button-icon">
             <span>Sign in with Google</span>
         `;
 
@@ -386,7 +358,7 @@ function showDestinationOptions() {
 
 // Function to initialize the application
 function initializeApp() {
-    logToConsole('Initializing application', 'info');
+    console.log('Initializing application...');
 
     // Disable destination buttons by default
     const outlookAuthBtn = document.getElementById('outlookAuthBtn');
@@ -395,14 +367,15 @@ function initializeApp() {
     if (outlookAuthBtn) outlookAuthBtn.disabled = true;
     if (yahooAuthBtn) yahooAuthBtn.disabled = true;
 
-    // Check if we have a Gmail token and enable destination buttons if we do
+    // Check if we have a Gmail token
     const gmailToken = localStorage.getItem('gmailToken');
     if (gmailToken) {
+        // Enable destination buttons
         if (outlookAuthBtn) outlookAuthBtn.disabled = false;
         if (yahooAuthBtn) yahooAuthBtn.disabled = false;
     }
 
-    // Initialize the Gmail auth button
+    // Initialize Gmail auth button
     updateGmailAuthButton();
 
     // Initialize destination selection
@@ -411,27 +384,87 @@ function initializeApp() {
     // Initialize modals
     initializeModals();
 
-    // Handle OAuth callback if present in URL
+    // Handle OAuth callback if present
     handleOAuthCallback();
 
     // Initialize migration options
-    initializeMigration();
+    initializeMigrationOptions();
 
     // Initialize advanced options toggle
+    initializeAdvancedOptionsToggle();
+
+    // Initialize batch size slider
+    initializeBatchSizeSlider();
+
+    // Load OAuth settings from local storage
+    loadOAuthSettings();
+
+    // Add animation classes to elements
+    animateUIElements();
+}
+
+// Function to animate UI elements
+function animateUIElements() {
+    console.log("Animating UI elements");
+
+    // Add visible class to advanced options if they were previously open
+    const advancedOptionsVisible = localStorage.getItem('advancedOptionsVisible') === 'true';
+    if (advancedOptionsVisible) {
+        document.getElementById('advancedOptions').classList.add('visible');
+        document.getElementById('advancedOptionsToggle').classList.add('active');
+    }
+
+    // Only fade in option items without any movement
+    const optionItems = document.querySelectorAll('.option-item');
+    optionItems.forEach((item, index) => {
+        setTimeout(() => {
+            item.style.opacity = '0';
+            item.style.transition = 'opacity 0.5s ease';
+
+            setTimeout(() => {
+                item.style.opacity = '1';
+            }, 50);
+        }, index * 100);
+    });
+
+    // Only fade in options row without any movement
+    const optionsRow = document.querySelector('.options-row');
+    if (optionsRow) {
+        optionsRow.style.opacity = '0';
+        optionsRow.style.transition = 'opacity 0.5s ease';
+
+        setTimeout(() => {
+            optionsRow.style.opacity = '1';
+        }, 100);
+    }
+
+    // No animations for auth sections row
+}
+
+// Function to initialize advanced options toggle
+function initializeAdvancedOptionsToggle() {
     const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
     const advancedOptions = document.getElementById('advancedOptions');
 
     if (advancedOptionsToggle && advancedOptions) {
         advancedOptionsToggle.addEventListener('click', function() {
-            advancedOptions.style.display = advancedOptions.style.display === 'block' ? 'none' : 'block';
-            const chevron = advancedOptionsToggle.querySelector('.chevron');
-            if (chevron) {
-                chevron.style.transform = advancedOptions.style.display === 'block' ? 'rotate(180deg)' : 'rotate(0)';
-            }
-        });
-    }
+            advancedOptionsToggle.classList.toggle('active');
+            advancedOptions.classList.toggle('visible');
 
-    // Initialize batch size slider
+            // Store the state in localStorage
+            localStorage.setItem('advancedOptionsOpen', advancedOptions.classList.contains('visible'));
+        });
+
+        // Check if advanced options were previously open
+        if (localStorage.getItem('advancedOptionsOpen') === 'true') {
+            advancedOptionsToggle.classList.add('active');
+            advancedOptions.classList.add('visible');
+        }
+    }
+}
+
+// Function to initialize batch size slider
+function initializeBatchSizeSlider() {
     const batchSizeSlider = document.getElementById('batchSizeSlider');
     const batchSizeValue = document.getElementById('batchSizeValue');
     const batchProcessingCheckbox = document.getElementById('batchProcessing');
@@ -439,18 +472,58 @@ function initializeApp() {
 
     if (batchSizeSlider && batchSizeValue) {
         batchSizeSlider.addEventListener('input', function() {
-            batchSizeValue.textContent = this.value + ' emails';
+            batchSizeValue.textContent = `${this.value} emails`;
         });
     }
 
     if (batchProcessingCheckbox && batchSizeContainer) {
+        // Show/hide batch size slider based on checkbox
         batchProcessingCheckbox.addEventListener('change', function() {
-            batchSizeContainer.style.display = this.checked ? 'block' : 'none';
+            if (this.checked) {
+                batchSizeContainer.style.maxHeight = '100px';
+                batchSizeContainer.style.opacity = '1';
+                batchSizeContainer.style.marginBottom = 'var(--spacing-large)';
+                batchSizeContainer.style.padding = 'var(--spacing-medium)';
+            } else {
+                batchSizeContainer.style.maxHeight = '0';
+                batchSizeContainer.style.opacity = '0';
+                batchSizeContainer.style.marginBottom = '0';
+                batchSizeContainer.style.padding = '0';
+            }
         });
-    }
 
-    // Load OAuth settings from localStorage if available
-    loadOAuthSettings();
+        // Initialize state
+        if (!batchProcessingCheckbox.checked) {
+            batchSizeContainer.style.maxHeight = '0';
+            batchSizeContainer.style.opacity = '0';
+            batchSizeContainer.style.marginBottom = '0';
+            batchSizeContainer.style.padding = '0';
+        }
+    }
+}
+
+// Function to initialize migration options
+function initializeMigrationOptions() {
+    // Add ripple effect to buttons
+    const buttons = document.querySelectorAll('.button');
+    buttons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            const rect = button.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const ripple = document.createElement('span');
+            ripple.classList.add('ripple');
+            ripple.style.left = `${x}px`;
+            ripple.style.top = `${y}px`;
+
+            button.appendChild(ripple);
+
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
+        });
+    });
 }
 
 // Document ready event

@@ -25,57 +25,59 @@
                 <h2>Connect Accounts</h2>
                 <p>Sign in to your accounts to begin the migration process.</p>
 
-                <div class="source-section">
-                    <h3>Source</h3>
+                <div class="auth-sections-row">
+                    <div class="source-section">
+                        <h3>Source</h3>
 
-                    <!-- Gmail Auth container -->
-                    <div class="account-selector">
-                        <div id="googleSignInButtonContainer" class="google-signin-container">
-                            <!-- Google button will be created dynamically in JavaScript -->
-                        </div>
-                    </div>
-                </div>
-
-                <div class="destination-section">
-                    <h3>Destination</h3>
-
-                    <!-- Direct Auth Buttons for Destination Selection -->
-                    <div class="account-selector">
-                        <!-- Microsoft Auth Button -->
-                        <button id="outlookAuthBtn" class="microsoft-auth-button" data-provider="outlook">
-                            <img src="{{ url_for('static', path='/img/microsoft-logo.svg') }}" alt="Microsoft Logo" class="auth-button-icon">
-                            <span>Sign in with Microsoft</span>
-                        </button>
-
-                        <!-- Yahoo Auth Button -->
-                        <button id="yahooAuthBtn" class="yahoo-auth-button" data-provider="yahoo">
-                            <img src="{{ url_for('static', path='/img/yahoo-white-icon.svg') }}" alt="Yahoo Logo" class="auth-button-icon">
-                            <span>Sign in with Yahoo</span>
-                        </button>
-                    </div>
-
-                    <!-- Removing the now redundant Select Destination button -->
-                    <!-- Destination Auth Buttons Container - Now hidden as we're using direct buttons -->
-                    <div id="destinationAuthContainer" class="destination-auth-container" style="display: none;">
-                        <!-- Microsoft Auth Section (Hidden) -->
-                        <div id="outlookAuthSection" class="provider-connection disconnected" style="display: none;">
-                            <div class="provider-header">
-                                <img src="{{ url_for('static', path='/img/outlook.svg') }}" alt="Microsoft Logo" class="provider-icon">
-                                <span class="provider-name">Microsoft Outlook</span>
-                                <span class="provider-status disconnected">
-                                    <i class="fas fa-circle"></i> Not Connected
-                                </span>
+                        <!-- Gmail Auth container -->
+                        <div class="account-selector">
+                            <div id="googleSignInButtonContainer" class="google-signin-container">
+                                <!-- Google button will be created dynamically in JavaScript -->
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Yahoo Auth Section (Hidden) -->
-                        <div id="yahooAuthSection" class="provider-connection disconnected" style="display: none;">
-                            <div class="provider-header">
-                                <img src="{{ url_for('static', path='/img/yahoo.svg') }}" alt="Yahoo Logo" class="provider-icon">
-                                <span class="provider-name">Yahoo Mail</span>
-                                <span class="provider-status disconnected">
-                                    <i class="fas fa-circle"></i> Not Connected
-                                </span>
+                    <div class="destination-section">
+                        <h3>Destination</h3>
+
+                        <!-- Direct Auth Buttons for Destination Selection -->
+                        <div class="account-selector">
+                            <!-- Microsoft Auth Button -->
+                            <button id="outlookAuthBtn" class="microsoft-auth-button" data-provider="outlook">
+                                <img src="{{ url_for('static', path='/img/microsoft-logo.svg') }}" alt="Microsoft Logo" class="auth-button-icon">
+                                <span>Sign in with Microsoft</span>
+                            </button>
+
+                            <!-- Yahoo Auth Button -->
+                            <button id="yahooAuthBtn" class="yahoo-auth-button" data-provider="yahoo">
+                                <img src="{{ url_for('static', path='/img/yahoo-white-icon.svg') }}" alt="Yahoo Logo" class="auth-button-icon">
+                                <span>Sign in with Yahoo</span>
+                            </button>
+                        </div>
+
+                        <!-- Removing the now redundant Select Destination button -->
+                        <!-- Destination Auth Buttons Container - Now hidden as we're using direct buttons -->
+                        <div id="destinationAuthContainer" class="destination-auth-container" style="display: none;">
+                            <!-- Microsoft Auth Section (Hidden) -->
+                            <div id="outlookAuthSection" class="provider-connection disconnected" style="display: none;">
+                                <div class="provider-header">
+                                    <img src="{{ url_for('static', path='/img/outlook.svg') }}" alt="Microsoft Logo" class="provider-icon">
+                                    <span class="provider-name">Microsoft Outlook</span>
+                                    <span class="provider-status disconnected">
+                                        <i class="fas fa-circle"></i> Not Connected
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Yahoo Auth Section (Hidden) -->
+                            <div id="yahooAuthSection" class="provider-connection disconnected" style="display: none;">
+                                <div class="provider-header">
+                                    <img src="{{ url_for('static', path='/img/yahoo.svg') }}" alt="Yahoo Logo" class="provider-icon">
+                                    <span class="provider-name">Yahoo Mail</span>
+                                    <span class="provider-status disconnected">
+                                        <i class="fas fa-circle"></i> Not Connected
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -85,25 +87,27 @@
             <section class="card options-card">
                 <h2>Options</h2>
 
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="preserveFolders" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Preserve Folders</h4>
-                        <p>Maintain your existing folder structure</p>
+                <div class="options-row">
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="preserveFolders" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Preserve Folders</h4>
+                            <p>Maintain your existing folder structure</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="includeAttachments" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Include Attachments</h4>
-                        <p>Transfer files attached to emails</p>
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="includeAttachments" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Include Attachments</h4>
+                            <p>Transfer files attached to emails</p>
+                        </div>
                     </div>
                 </div>
 
