@@ -32,9 +32,7 @@ class TestOutlookDependencies:
             await get_outlook_client(authorization=None)
 
         assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert (
-            "Authorization header with Bearer token is required" in excinfo.value.detail
-        )
+        assert "Authorization header with Bearer token is required" in excinfo.value.detail
         assert excinfo.value.headers == {"WWW-Authenticate": "Bearer"}
 
     @pytest.mark.asyncio()
@@ -44,9 +42,7 @@ class TestOutlookDependencies:
             await get_outlook_client(authorization="InvalidFormat token123")
 
         assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert (
-            "Authorization header with Bearer token is required" in excinfo.value.detail
-        )
+        assert "Authorization header with Bearer token is required" in excinfo.value.detail
 
     @pytest.mark.asyncio()
     async def test_get_outlook_client_exception(self):
@@ -58,7 +54,7 @@ class TestOutlookDependencies:
                 await get_outlook_client(authorization="Bearer test_token")
 
             assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-            assert "Invalid or expired credentials" in excinfo.value.detail
+            assert "Invalid or expired Microsoft Graph API credentials" in excinfo.value.detail
 
 
 @pytest.mark.unit()
@@ -85,9 +81,7 @@ class TestGmailDependencies:
             await get_gmail_client(authorization=None)
 
         assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert (
-            "Authorization header with Bearer token is required" in excinfo.value.detail
-        )
+        assert "Authorization header with Bearer token is required" in excinfo.value.detail
         assert excinfo.value.headers == {"WWW-Authenticate": "Bearer"}
 
     @pytest.mark.asyncio()
@@ -97,9 +91,7 @@ class TestGmailDependencies:
             await get_gmail_client(authorization="InvalidFormat token123")
 
         assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert (
-            "Authorization header with Bearer token is required" in excinfo.value.detail
-        )
+        assert "Authorization header with Bearer token is required" in excinfo.value.detail
 
     @pytest.mark.asyncio()
     async def test_get_gmail_client_exception(self):

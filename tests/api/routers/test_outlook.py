@@ -52,9 +52,7 @@ class TestOutlookRouter:
     @patch("app.api.routers.outlook.outlook_oauth_flow")
     def test_get_auth_url_default(self, mock_oauth_flow, test_client):
         """Test getting auth URL with default OAuth flow."""
-        mock_oauth_flow.get_auth_url.return_value = (
-            "https://login.microsoftonline.com/auth"
-        )
+        mock_oauth_flow.get_auth_url.return_value = "https://login.microsoftonline.com/auth"
 
         response = test_client.post("/outlook/auth-url")
 
@@ -63,9 +61,7 @@ class TestOutlookRouter:
         mock_oauth_flow.get_auth_url.assert_called_once()
 
     @patch("app.api.routers.outlook.OutlookAuthManager")
-    def test_get_auth_url_custom_config(
-        self, mock_auth_manager_class, test_client, mock_auth_manager
-    ):
+    def test_get_auth_url_custom_config(self, mock_auth_manager_class, test_client, mock_auth_manager):
         """Test getting auth URL with custom OAuth config."""
         mock_auth_manager_class.return_value = mock_auth_manager
 
@@ -101,7 +97,7 @@ class TestOutlookRouter:
     @patch("app.api.routers.outlook.outlook_oauth_flow")
     def test_auth_callback_default(self, mock_oauth_flow, test_client):
         """Test auth callback with default OAuth flow."""
-        mock_oauth_flow.exchange_code.return_value = {
+        mock_oauth_flow.get_token_from_code.return_value = {
             "access_token": "mock_access_token",
             "refresh_token": "mock_refresh_token",
             "expires_in": 3600,
@@ -119,13 +115,11 @@ class TestOutlookRouter:
             "token_type": "Bearer",
             "scope": "Mail.Read Mail.ReadWrite",
         }
-        mock_oauth_flow.exchange_code.assert_called_once_with("mock_code")
+        mock_oauth_flow.get_token_from_code.assert_called_once_with("mock_code")
 
     @pytest.mark.auth()
     @patch("app.api.routers.outlook.OutlookAuthManager")
-    def test_auth_callback_custom_config(
-        self, mock_auth_manager_class, test_client, mock_auth_manager
-    ):
+    def test_auth_callback_custom_config(self, mock_auth_manager_class, test_client, mock_auth_manager):
         """Test auth callback with custom OAuth config."""
         mock_auth_manager_class.return_value = mock_auth_manager
 
@@ -145,13 +139,13 @@ class TestOutlookRouter:
             client_secret="custom_client_secret",
             redirect_uri="http://localhost:8000/custom-callback",
         )
-        mock_auth_manager.exchange_code.assert_called_once_with("mock_code")
+        mock_auth_manager.get_token_from_code.assert_called_once_with("mock_code")
 
     @pytest.mark.auth()
     @patch("app.api.routers.outlook.outlook_oauth_flow")
     def test_auth_callback_error(self, mock_oauth_flow, test_client):
         """Test error handling in auth callback."""
-        mock_oauth_flow.exchange_code.side_effect = Exception("Exchange error")
+        mock_oauth_flow.get_token_from_code.side_effect = Exception("Exchange error")
 
         response = test_client.post("/outlook/auth-callback?code=mock_code")
 
@@ -193,9 +187,7 @@ class TestOutlookRouter:
         mock_outlook_client.get_folders.assert_called_once()
 
     @patch("app.dependencies.get_outlook_client")
-    def test_list_folders_error(
-        self, mock_get_client, test_client, mock_outlook_client
-    ):
+    def test_list_folders_error(self, mock_get_client, test_client, mock_outlook_client):
         """Test error handling when listing folders."""
         mock_get_client.return_value = mock_outlook_client
         mock_outlook_client.get_folders.side_effect = Exception("Folder error")
@@ -239,23 +231,17 @@ class TestOutlookRouter:
             "unreadItemCount": 0,
         }
 
-        response = test_client.post(
-            "/outlook/folders?name=Test%20Subfolder&parent_folder_id=parent_folder"
-        )
+        response = test_client.post("/outlook/folders?name=Test%20Subfolder&parent_folder_id=parent_folder")
 
         assert response.status_code == 200
         folder = response.json()
         assert folder["id"] == "new_subfolder"
         assert folder["display_name"] == "Test Subfolder"
         assert folder["parent_folder_id"] == "parent_folder"
-        mock_outlook_client.create_folder.assert_called_once_with(
-            "Test Subfolder", "parent_folder"
-        )
+        mock_outlook_client.create_folder.assert_called_once_with("Test Subfolder", "parent_folder")
 
     @patch("app.dependencies.get_outlook_client")
-    def test_create_folder_error(
-        self, mock_get_client, test_client, mock_outlook_client
-    ):
+    def test_create_folder_error(self, mock_get_client, test_client, mock_outlook_client):
         """Test error handling when creating a folder."""
         mock_get_client.return_value = mock_outlook_client
         mock_outlook_client.create_folder.side_effect = Exception("Creation error")
@@ -347,9 +333,7 @@ class TestOutlookRouter:
         # Mock Outlook client response
         mock_outlook_client.migrate_email.return_value = {"id": "outlook_email_id"}
 
-        response = test_client.post(
-            "/outlook/migrate-email?email_id=email123&folder_id=folder123"
-        )
+        response = test_client.post("/outlook/migrate-email?email_id=email123&folder_id=folder123")
 
         assert response.status_code == 200
         result = response.json()

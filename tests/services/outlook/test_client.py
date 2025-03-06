@@ -5,6 +5,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from fastapi import HTTPException
 
 from app.services.outlook.client import OutlookClient
@@ -57,18 +58,14 @@ class TestOutlookClient:
         assert result == {"value": []}
 
     @patch("requests.request")
-    def test_make_request_with_params_and_data(
-        self, mock_request, outlook_client, mock_response
-    ):
+    def test_make_request_with_params_and_data(self, mock_request, outlook_client, mock_response):
         """Test API request with parameters and data."""
         mock_request.return_value = mock_response
 
         params = {"$select": "id,subject"}
         data = {"subject": "Test Subject"}
 
-        outlook_client._make_request(
-            "POST", "/test-endpoint", params=params, request_data=data
-        )
+        outlook_client._make_request("POST", "/test-endpoint", params=params, request_data=data)
 
         mock_request.assert_called_once_with(
             "POST",
@@ -80,9 +77,7 @@ class TestOutlookClient:
         )
 
     @patch("requests.request")
-    def test_make_request_with_custom_headers(
-        self, mock_request, outlook_client, mock_response
-    ):
+    def test_make_request_with_custom_headers(self, mock_request, outlook_client, mock_response):
         """Test API request with custom headers."""
         mock_request.return_value = mock_response
 
@@ -91,9 +86,7 @@ class TestOutlookClient:
             "data": "test data",
         }
 
-        outlook_client._make_request(
-            "POST", "/test-endpoint", request_data=request_data
-        )
+        outlook_client._make_request("POST", "/test-endpoint", request_data=request_data)
 
         expected_headers = {
             "Authorization": "Bearer mock_access_token",
@@ -114,7 +107,7 @@ class TestOutlookClient:
         """Test API request error handling."""
         mock_response = MagicMock()
         mock_response.status_code = 400
-        mock_response.raise_for_status.side_effect = Exception("API Error")
+        mock_response.raise_for_status.side_effect = requests.RequestException("API Error")
         mock_request.return_value = mock_response
 
         with pytest.raises(HTTPException) as excinfo:
@@ -141,9 +134,7 @@ class TestOutlookClient:
 
         result = outlook_client.get_folders()
 
-        mock_make_request.assert_called_once_with(
-            "GET", "/me/mailfolders?$top=100&$expand=childFolders"
-        )
+        mock_make_request.assert_called_once_with("GET", "/me/mailfolders?$top=100&$expand=childFolders")
         assert result == mock_folders
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
@@ -155,7 +146,7 @@ class TestOutlookClient:
         result = outlook_client.create_folder("Test Folder")
 
         mock_make_request.assert_called_once_with(
-            "POST", "/me/mailfolders", data={"displayName": "Test Folder"}
+            "POST", "/me/mailfolders", request_data={"displayName": "Test Folder"}
         )
         assert result == mock_folder
 
@@ -165,14 +156,12 @@ class TestOutlookClient:
         mock_folder = {"id": "new_subfolder", "displayName": "Test Subfolder"}
         mock_make_request.return_value = mock_folder
 
-        result = outlook_client.create_folder(
-            "Test Subfolder", parent_folder_id="parent_id"
-        )
+        result = outlook_client.create_folder("Test Subfolder", parent_folder_id="parent_id")
 
         mock_make_request.assert_called_once_with(
             "POST",
             "/me/mailfolders/parent_id/childFolders",
-            data={"displayName": "Test Subfolder"},
+            request_data={"displayName": "Test Subfolder"},
         )
         assert result == mock_folder
 
@@ -189,9 +178,7 @@ class TestOutlookClient:
         assert skip_token is None
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
-    def test_get_messages_with_folder_and_query(
-        self, mock_make_request, outlook_client
-    ):
+    def test_get_messages_with_folder_and_query(self, mock_make_request, outlook_client):
         """Test getting messages with folder ID and search query."""
         mock_messages = [{"id": "msg1", "subject": "Test Email"}]
         mock_make_request.return_value = {
@@ -199,24 +186,17 @@ class TestOutlookClient:
             "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=token123&$top=50",
         }
 
-        messages, skip_token = outlook_client.get_messages(
-            folder_id="folder_id", query="important", top=10, skip=5
-        )
+        messages, skip_token = outlook_client.get_messages(folder_id="folder_id", query="important", top=10, skip=5)
 
         expected_params = {
             "$top": 10,
             "$skip": 5,
-            "$select": (
-                "id,conversationId,subject,bodyPreview,receivedDateTime,"
-                "from,toRecipients,hasAttachments"
-            ),
+            "$select": ("id,conversationId,subject,bodyPreview,receivedDateTime," "from,toRecipients,hasAttachments"),
             "$orderby": "receivedDateTime desc",
             "$search": "important",
         }
 
-        mock_make_request.assert_called_once_with(
-            "GET", "/me/mailfolders/folder_id/messages", params=expected_params
-        )
+        mock_make_request.assert_called_once_with("GET", "/me/mailfolders/folder_id/messages", params=expected_params)
         assert messages == mock_messages
         assert skip_token == "token123"
 
@@ -228,9 +208,7 @@ class TestOutlookClient:
 
         result = outlook_client.get_message("msg1")
 
-        mock_make_request.assert_called_once_with(
-            "GET", "/me/messages/msg1?$expand=attachments"
-        )
+        mock_make_request.assert_called_once_with("GET", "/me/messages/msg1?$expand=attachments")
         assert result == mock_message
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
@@ -241,9 +219,7 @@ class TestOutlookClient:
 
         result = outlook_client.get_attachment("msg1", "att1")
 
-        mock_make_request.assert_called_once_with(
-            "GET", "/me/messages/msg1/attachments/att1"
-        )
+        mock_make_request.assert_called_once_with("GET", "/me/messages/msg1/attachments/att1")
         assert result == mock_attachment
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
@@ -267,16 +243,12 @@ class TestOutlookClient:
             "toRecipients": [{"emailAddress": {"address": "test@example.com"}}],
         }
 
-        mock_make_request.assert_called_once_with(
-            "POST", "/me/messages", request_data=expected_data
-        )
+        mock_make_request.assert_called_once_with("POST", "/me/messages", request_data=expected_data)
         assert result == mock_message
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
     @patch("app.services.outlook.client.OutlookClient.add_attachment")
-    def test_create_message_with_attachments(
-        self, mock_add_attachment, mock_make_request, outlook_client
-    ):
+    def test_create_message_with_attachments(self, mock_add_attachment, mock_make_request, outlook_client):
         """Test creating a message with attachments."""
         mock_message = {"id": "new_msg", "subject": "Test Subject"}
         mock_make_request.return_value = mock_message
@@ -328,9 +300,7 @@ class TestOutlookClient:
             "contentBytes": encoded_content,
         }
 
-        mock_make_request.assert_called_once_with(
-            "POST", "/me/messages/msg1/attachments", request_data=expected_data
-        )
+        mock_make_request.assert_called_once_with("POST", "/me/messages/msg1/attachments", request_data=expected_data)
         assert result == mock_attachment
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
@@ -377,9 +347,7 @@ class TestOutlookClient:
             "data": mime_content,
         }
 
-        mock_make_request.assert_called_once_with(
-            "POST", "/me/messages/$value", request_data=expected_request_data
-        )
+        mock_make_request.assert_called_once_with("POST", "/me/messages/$value", request_data=expected_request_data)
         assert result == mock_response
 
     @patch("app.services.outlook.client.OutlookClient._make_request")
@@ -406,9 +374,7 @@ class TestOutlookClient:
 
     @patch("app.services.outlook.client.OutlookClient.create_message")
     @patch("app.services.outlook.client.OutlookClient.add_attachment")
-    def test_migrate_email(
-        self, mock_add_attachment, mock_create_message, outlook_client
-    ):
+    def test_migrate_email(self, mock_add_attachment, mock_create_message, outlook_client):
         """Test migrating an email from Gmail to Outlook."""
         mock_message = {"id": "migrated_msg", "subject": "Test Subject"}
         mock_create_message.return_value = mock_message
