@@ -1,7 +1,8 @@
 """Authentication manager for Outlook API."""
 
 import logging
-import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import msal
@@ -13,7 +14,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Define the token cache file path
-TOKEN_CACHE_FILE = ".outlook_token_cache.json"
+TOKEN_CACHE_FILE = Path(".outlook_token_cache.json")
 
 # Define the scopes for the Microsoft Graph API
 SCOPES = [
@@ -47,39 +48,40 @@ def _raise_token_error(result: dict[str, Any], operation: str) -> None:
     )
 
 
+@dataclass
+class OutlookAuthConfig:
+    """Configuration for Outlook authentication."""
+
+    client_id: str = settings.OUTLOOK_CLIENT_ID
+    client_secret: str = settings.OUTLOOK_CLIENT_SECRET
+    redirect_uri: str = settings.OUTLOOK_REDIRECT_URI
+    authority: str = "https://login.microsoftonline.com/common"
+    scopes: list[str] = None
+
+    def __post_init__(self) -> None:
+        """Initialize default values after initialization."""
+        if self.scopes is None:
+            self.scopes = SCOPES
+
+
 class OutlookAuthManager:
     """Authentication manager for Outlook API."""
 
-    def __init__(
-        self,
-        client_id: str = settings.OUTLOOK_CLIENT_ID,
-        client_secret: str = settings.OUTLOOK_CLIENT_SECRET,
-        redirect_uri: str = settings.OUTLOOK_REDIRECT_URI,
-        authority: str = "https://login.microsoftonline.com/common",
-        scopes: list[str] = None,
-    ) -> None:
+    def __init__(self, config: OutlookAuthConfig = None) -> None:
         """
         Initialize the Outlook authentication manager.
 
         Args:
-            client_id: The client ID for the Outlook application
-            client_secret: The client secret for the Outlook application
-            redirect_uri: The redirect URI for the Outlook application
-            authority: The authority URL for the Outlook application
-            scopes: The scopes for the Outlook application
+            config: The configuration for the Outlook authentication
         """
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.redirect_uri = redirect_uri
-        self.authority = authority
-        self.scopes = scopes or SCOPES
+        self.config = config or OutlookAuthConfig()
         self.cache = self._load_cache()
-        
+
         try:
             self.app = msal.ConfidentialClientApplication(
-                client_id=self.client_id,
-                client_secret=self.client_secret,
-                authority=self.authority,
+                client_id=self.config.client_id,
+                client_secret=self.config.client_secret,
+                authority=self.config.authority,
                 token_cache=self.cache,
             )
             logger.info("MSAL ConfidentialClientApplication initialized successfully")
@@ -95,24 +97,24 @@ class OutlookAuthManager:
             SerializableTokenCache: The token cache
         """
         cache = msal.SerializableTokenCache()
-        
-        if os.path.exists(TOKEN_CACHE_FILE):
+
+        if TOKEN_CACHE_FILE.exists():
             try:
-                with open(TOKEN_CACHE_FILE) as cache_file:
+                with TOKEN_CACHE_FILE.open() as cache_file:
                     cache.deserialize(cache_file.read())
                 logger.info(f"Loaded token cache from {TOKEN_CACHE_FILE}")
             except Exception:
                 logger.exception(f"Failed to load token cache from {TOKEN_CACHE_FILE}")
         else:
             logger.info("Token cache file not found, creating new cache")
-        
+
         return cache
 
     def _save_cache(self) -> None:
         """Save the token cache to file."""
         if self.cache.has_state_changed:
             try:
-                with open(TOKEN_CACHE_FILE, "w") as cache_file:
+                with TOKEN_CACHE_FILE.open("w") as cache_file:
                     cache_file.write(self.cache.serialize())
                 logger.info(f"Saved token cache to {TOKEN_CACHE_FILE}")
             except Exception:
@@ -130,26 +132,26 @@ class OutlookAuthManager:
         """
         try:
             auth_url = self.app.get_authorization_request_url(
-                self.scopes,
-                redirect_uri=self.redirect_uri,
+                self.config.scopes,
+                redirect_uri=self.config.redirect_uri,
                 prompt="select_account",
             )
-            
+
             logger.info(f"Generated authorization URL: {auth_url}")
             return auth_url
         except Exception as e:
             logger.exception("Error generating authorization URL")
-            
-            # If the error is related to reserved scopes, try with a mock URL for testing
+
+            # If error is related to reserved scopes, try with a mock URL
             if "reserved" in str(e):
                 logger.warning("Using mock URL due to scope error")
                 return (
                     f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-                    f"?client_id={self.client_id}&response_type=code"
-                    f"&redirect_uri={self.redirect_uri}"
-                    f"&scope={'+'.join(self.scopes)}"
+                    f"?client_id={self.config.client_id}&response_type=code"
+                    f"&redirect_uri={self.config.redirect_uri}"
+                    f"&scope={'+'.join(self.config.scopes)}"
                 )
-                
+
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate authorization URL: {str(e)}",
@@ -170,13 +172,13 @@ class OutlookAuthManager:
         """
         try:
             logger.info(f"Acquiring token with code: {code[:10]}...")
-            logger.info(f"Using client ID: {self.client_id}")
-            logger.info(f"Using client secret: {self.client_secret[:5]}...")
-            logger.info(f"Using redirect URI: {self.redirect_uri}")
-            logger.info(f"Using scopes: {self.scopes}")
+            logger.info(f"Using client ID: {self.config.client_id}")
+            logger.info(f"Using client secret: {self.config.client_secret[:5]}...")
+            logger.info(f"Using redirect URI: {self.config.redirect_uri}")
+            logger.info(f"Using scopes: {self.config.scopes}")
 
             result = self.app.acquire_token_by_authorization_code(
-                code, scopes=self.scopes, redirect_uri=self.redirect_uri
+                code, scopes=self.config.scopes, redirect_uri=self.config.redirect_uri
             )
             self._save_cache()
 
@@ -208,11 +210,11 @@ class OutlookAuthManager:
         """
         try:
             logger.info(f"Exchanging authorization code for token: {code[:10]}...")
-            logger.info(f"Using client ID: {self.client_id}")
-            logger.info(f"Using redirect URI: {self.redirect_uri}")
-            
+            logger.info(f"Using client ID: {self.config.client_id}")
+            logger.info(f"Using redirect URI: {self.config.redirect_uri}")
+
             token_info = self.get_token_from_code(code)
-            
+
             # Format the response to match the expected structure
             return {
                 "access_token": token_info.get("access_token", ""),
@@ -246,7 +248,9 @@ class OutlookAuthManager:
             accounts = self.app.get_accounts()
             if accounts:
                 logger.info(f"Found {len(accounts)} accounts in cache")
-                result = self.app.acquire_token_silent(self.scopes, account=accounts[0])
+                result = self.app.acquire_token_silent(
+                    self.config.scopes, account=accounts[0]
+                )
                 if result:
                     logger.info("Got token silently from cache")
                     return result
@@ -254,7 +258,7 @@ class OutlookAuthManager:
             # If not in cache, use the refresh token
             logger.info("Getting token with refresh token")
             result = self.app.acquire_token_by_refresh_token(
-                refresh_token, scopes=self.scopes
+                refresh_token, scopes=self.config.scopes
             )
             self._save_cache()
 

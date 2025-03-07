@@ -1,10 +1,10 @@
 """Outlook client for Microsoft Graph API interactions."""
 
 import base64
+import json
 import logging
 import mimetypes
-from typing import Any, Dict, List, Optional
-import json
+from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
@@ -52,10 +52,55 @@ class OutlookClient:
             HTTPException: If the request fails
         """
         url = f"{GRAPH_API_BASE_URL}{endpoint}"
-        
+
+        def raise_unsupported_method(method_name: str) -> None:
+            """Raise ValueError for unsupported HTTP method."""
+            error_msg = f"Unsupported HTTP method: {method_name}"
+            raise ValueError(error_msg)
+
+        def handle_http_error(error: httpx.HTTPStatusError) -> None:
+            """Handle HTTP errors and raise appropriate exceptions."""
+            logger.exception("HTTP error occurred")
+
+            # Handle specific error codes
+            if error.response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed. Please sign in again.",
+                ) from error
+
+            if error.response.status_code == 403:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to access this resource.",
+                ) from error
+
+            if error.response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="The requested resource was not found.",
+                ) from error
+
+            # Try to parse the error response
+            try:
+                error_data = error.response.json()
+                error_message = error_data.get("error", {}).get(
+                    "message", "Unknown error"
+                )
+                raise HTTPException(
+                    status_code=error.response.status_code,
+                    detail=f"Microsoft Graph API error: {error_message}",
+                ) from error
+            except json.JSONDecodeError:
+                # If we can't parse the error response, use the status code and text
+                raise HTTPException(
+                    status_code=error.response.status_code,
+                    detail=f"Microsoft Graph API error: {error.response.text}",
+                ) from error
+
         try:
             logger.info(f"Making {method} request to {url}")
-            
+
             with httpx.Client(timeout=30.0) as client:
                 if method.upper() == "GET":
                     response = client.get(url, headers=self.headers, params=params)
@@ -70,63 +115,26 @@ class OutlookClient:
                 elif method.upper() == "DELETE":
                     response = client.delete(url, headers=self.headers, params=params)
                 else:
-                    error_msg = f"Unsupported HTTP method: {method}"
-                    raise ValueError(error_msg)
+                    raise_unsupported_method(method)
 
             # Check if the request was successful
             response.raise_for_status()
-            
+
             # Parse the response
             if response.content:
                 return response.json()
             return {}
-            
+
         except httpx.HTTPStatusError as e:
-            logger.exception("HTTP error occurred")
-            
-            # Handle specific error codes
-            if e.response.status_code == 401:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication failed. Please sign in again.",
-                ) from e
-            
-            if e.response.status_code == 403:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have permission to access this resource.",
-                ) from e
-            
-            if e.response.status_code == 404:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="The requested resource was not found.",
-                ) from e
-            
-            # Try to parse the error response
-            try:
-                error_data = e.response.json()
-                error_message = error_data.get("error", {}).get(
-                    "message", "Unknown error"
-                )
-                raise HTTPException(
-                    status_code=e.response.status_code,
-                    detail=f"Microsoft Graph API error: {error_message}",
-                ) from e
-            except json.JSONDecodeError:
-                # If we can't parse the error response, use the status code and text
-                raise HTTPException(
-                    status_code=e.response.status_code,
-                    detail=f"Microsoft Graph API error: {e.response.text}",
-                ) from e
-                    
+            handle_http_error(e)
+
         except httpx.RequestError as e:
             logger.exception("Request error occurred")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Error connecting to Microsoft Graph API: {str(e)}",
             ) from e
-            
+
         except Exception as e:
             logger.exception("Unexpected error occurred")
             raise HTTPException(
@@ -471,26 +479,25 @@ class OutlookClient:
         try:
             logger.info("Getting user profile")
             response = self._make_request(
-                "GET", 
-                "/me?$select=displayName,mail,userPrincipalName,id,otherMails"
+                "GET", "/me?$select=displayName,mail,userPrincipalName,id,otherMails"
             )
-            
+
             # Log the fields that might contain email addresses
             email_fields = []
-            if 'mail' in response:
+            if "mail" in response:
                 email_fields.append(f"mail: {response.get('mail')}")
-            if 'userPrincipalName' in response:
+            if "userPrincipalName" in response:
                 email_fields.append(
                     f"userPrincipalName: {response.get('userPrincipalName')}"
                 )
-            if 'otherMails' in response and response['otherMails']:
+            if "otherMails" in response and response["otherMails"]:
                 email_fields.append(f"otherMails: {response.get('otherMails')}")
-                
+
             if email_fields:
                 logger.info(f"Found email fields: {', '.join(email_fields)}")
             else:
                 logger.warning("No email fields found in user profile")
-                
+
             return response
         except Exception:
             logger.exception("Error fetching user profile")
@@ -499,8 +506,7 @@ class OutlookClient:
             try:
                 logger.info("Trying to get just the email")
                 email_response = self._make_request(
-                    "GET", 
-                    "/me?$select=mail,userPrincipalName,id,displayName"
+                    "GET", "/me?$select=mail,userPrincipalName,id,displayName"
                 )
                 logger.info(f"Email response: {email_response}")
                 return email_response
