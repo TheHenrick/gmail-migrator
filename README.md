@@ -167,7 +167,7 @@ Enter the client IDs and secrets in the application's OAuth Settings modal or in
 #### Creating Outlook OAuth Credentials
 
 1. Go to the [Microsoft Azure Portal](https://portal.azure.com/)
-2. Navigate to "Azure Active Directory" > "App registrations"
+2. Navigate to "Microsoft Entra" > "Applications" > "App registrations"
 3. Click "New registration"
 4. Enter the following information:
    - Name: Gmail Migrator
