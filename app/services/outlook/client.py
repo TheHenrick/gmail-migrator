@@ -397,3 +397,51 @@ class OutlookClient:
                 )
 
         return message
+
+    def get_user_profile(self) -> dict[str, Any]:
+        """
+        Get the user's profile information.
+
+        Returns:
+            Dict[str, Any]: User profile information
+        """
+        logger.info("Fetching user profile from Microsoft Graph API")
+        try:
+            # First try to get the full profile
+            response = self._make_request("GET", "/me")
+            logger.info(f"User profile response: {response}")
+
+            # Log specific fields we're interested in
+            email_fields = []
+            if "mail" in response:
+                email_fields.append(f"mail: {response.get('mail')}")
+            if "userPrincipalName" in response:
+                email_fields.append(
+                    f"userPrincipalName: {response.get('userPrincipalName')}"
+                )
+            if "otherMails" in response and response["otherMails"]:
+                email_fields.append(f"otherMails: {response.get('otherMails')}")
+
+            logger.info(f"Email fields found: {', '.join(email_fields)}")
+
+            return response
+        except Exception as e:
+            logger.error(f"Error fetching user profile: {str(e)}")
+
+            # If full profile fails, try to get just the email
+            try:
+                logger.info("Trying to get just the email")
+                email_response = self._make_request(
+                    "GET", "/me?$select=mail,userPrincipalName,id,displayName"
+                )
+                logger.info(f"Email response: {email_response}")
+                return email_response
+            except Exception as email_error:
+                logger.error(f"Error fetching email: {str(email_error)}")
+
+                # If all else fails, return a minimal profile with default values
+                return {
+                    "displayName": "Microsoft User",
+                    "userPrincipalName": "Microsoft Account",
+                    "id": "unknown",
+                }

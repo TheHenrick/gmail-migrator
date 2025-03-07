@@ -356,36 +356,28 @@ async function getGmailOAuthUrl() {
 // Function to show destination options
 function showDestinationOptions() {
     console.log('showDestinationOptions called');
-    // Toggle visibility of destination options container
-    const destinationOptionsContainer = document.getElementById('destination-options-container');
-    if (destinationOptionsContainer) {
-        destinationOptionsContainer.classList.toggle('hidden');
-        logToConsole('Showing destination options...', 'info');
-    } else {
-        console.error('Destination options container not found');
-        logToConsole('Error: Could not find destination options container', 'error');
-    }
+
+    // This function is no longer needed since we're using direct buttons
+    // Just log a message and return
+    logToConsole('Destination options are now directly available', 'info');
+
+    // Enable destination buttons if Gmail is connected
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+
+    if (outlookAuthBtn) outlookAuthBtn.disabled = false;
+    if (yahooAuthBtn) yahooAuthBtn.disabled = false;
 }
 
 // Function to initialize the application
 function initializeApp() {
     console.log('Initializing application...');
 
-    // Check if Gmail token exists in localStorage
-    const gmailToken = localStorage.getItem('gmailToken');
-    if (gmailToken) {
-        // User is already authenticated, update UI
-        updateUIAfterGmailConnection(true);
-    } else {
-        // User is not authenticated, show connect button
-        updateUIAfterGmailConnection(false);
-    }
+    // Check for OAuth callback parameters
+    handleOAuthCallback();
 
-    // Disable destination buttons by default
-    const destinationButtons = document.querySelectorAll('.destination-option');
-    destinationButtons.forEach(button => {
-        button.disabled = true;
-    });
+    // Initialize Google Sign-In
+    initializeGoogleSignIn();
 
     // Initialize destination selection
     initializeDestinationSelection();
@@ -399,8 +391,8 @@ function initializeApp() {
     // Initialize migration options
     initializeMigrationOptions();
 
-    // Check for OAuth callback
-    handleOAuthCallback();
+    // Initialize OAuth settings modal
+    initializeOAuthSettingsModal();
 
     // Animate UI elements
     animateUIElements();
@@ -529,6 +521,21 @@ function initializeMigrationOptions() {
     });
 }
 
+// Function to initialize Google Sign-In
+function initializeGoogleSignIn() {
+    console.log('Initializing Google Sign-In...');
+
+    // Check if Gmail token exists in localStorage
+    const gmailToken = localStorage.getItem('gmailToken');
+    if (gmailToken) {
+        // User is already authenticated, update UI
+        updateUIAfterGmailConnection(true);
+    } else {
+        // User is not authenticated, show connect button
+        updateUIAfterGmailConnection(false);
+    }
+}
+
 // Initialize the application when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM fully loaded, initializing application...');
@@ -569,116 +576,157 @@ function handleOAuthCallback() {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
+    const error = urlParams.get('error');
+    const outlookAuth = urlParams.get('outlook_auth');
+    const token = urlParams.get('token');
+    const refreshToken = urlParams.get('refresh_token');
+    const email = urlParams.get('email');
+
+    console.log('URL parameters:', {
+        code: code ? `${code.substring(0, 10)}...` : null,
+        state,
+        error,
+        outlookAuth,
+        token: token ? `${token.substring(0, 10)}...` : null,
+        refreshToken: refreshToken ? `${refreshToken.substring(0, 10)}...` : null,
+        email
+    });
+
+    // Clean up URL - remove parameters to prevent reprocessing on refresh
+    if (history.pushState && (code || state || error || outlookAuth || token)) {
+        const newurl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.history.pushState({path: newurl}, '', newurl);
+        console.log('Cleaned up URL parameters');
+    }
+
+    // Handle Outlook auth success from redirect
+    if (outlookAuth === 'success' && token) {
+        logToConsole('Successfully connected to Outlook', 'success');
+        localStorage.setItem('outlookToken', token);
+
+        if (refreshToken) {
+            localStorage.setItem('outlookRefreshToken', refreshToken);
+        }
+
+        if (email) {
+            console.log('Storing Outlook email:', email);
+            localStorage.setItem('outlookUserEmail', decodeURIComponent(email));
+            logToConsole(`Connected as ${decodeURIComponent(email)}`, 'info');
+        } else {
+            console.warn('No email provided in the redirect URL');
+            localStorage.setItem('outlookUserEmail', 'Microsoft Account');
+        }
+
+        updateUIAfterOutlookConnection(true);
+        return;
+    }
+
+    // Handle Outlook auth error from redirect
+    if (error && error.includes('outlook_auth_failed')) {
+        const message = urlParams.get('message') || 'Unknown error';
+        logToConsole(`Error connecting to Outlook: ${message}`, 'error');
+        updateUIAfterOutlookConnection(false);
+        return;
+    }
 
     // If we have code or state, we might be in a callback
-    if (code || state) {
-        console.log('Found OAuth parameters in URL');
+    if (code || state || error) {
+        console.log('Found OAuth callback parameters in URL');
         logToConsole('Processing OAuth callback...', 'info');
 
-        // Handle processing if needed - usually this is handled by the backend
+        // Check for error
+        if (error) {
+            logToConsole(`OAuth error: ${error}`, 'error');
+            return;
+        }
 
-        // Clean up URL - remove parameters to prevent reprocessing on refresh
-        if (history.pushState) {
-            const newurl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-            window.history.pushState({path: newurl}, '', newurl);
-            console.log('Cleaned up URL parameters');
+        // Determine which provider this is for based on the current path
+        const path = window.location.pathname;
+
+        if (path.includes('/gmail/auth-callback') && code) {
+            // Handle Gmail callback - already implemented
+        } else if (path.includes('/yahoo/auth-callback') && code) {
+            // Handle Yahoo callback - to be implemented
         }
     } else {
         console.log('No OAuth callback parameters found in URL');
     }
 }
 
-// Function to handle destination provider selection
+// Function to initialize destination selection
 function initializeDestinationSelection() {
-    console.log('Initializing destination selection');
     const outlookAuthBtn = document.getElementById('outlookAuthBtn');
     const yahooAuthBtn = document.getElementById('yahooAuthBtn');
-    const outlookAuthSection = document.getElementById('outlookAuthSection');
-    const yahooAuthSection = document.getElementById('yahooAuthSection');
 
-    console.log('Outlook auth button found:', !!outlookAuthBtn);
-    console.log('Yahoo auth button found:', !!yahooAuthBtn);
-    console.log('Outlook auth section found:', !!outlookAuthSection);
-    console.log('Yahoo auth section found:', !!yahooAuthSection);
+    // Check if we have stored tokens
+    const outlookToken = localStorage.getItem('outlookToken');
+    const outlookUserEmail = localStorage.getItem('outlookUserEmail');
+    const yahooToken = localStorage.getItem('yahooToken');
+    const yahooUserEmail = localStorage.getItem('yahooUserEmail');
 
-    if (!outlookAuthBtn || !yahooAuthBtn) {
-        console.error('Destination auth buttons not found');
-        return;
-    }
-
-    // Add click event listeners to auth buttons
-    outlookAuthBtn.addEventListener('click', function(e) {
-        // Prevent default to handle the auth flow ourselves
-        e.preventDefault();
-
-        const provider = this.getAttribute('data-provider');
-        console.log('Outlook auth button clicked, provider:', provider);
-
-        // Store selected provider
-        localStorage.setItem('selectedDestinationProvider', 'outlook');
-        console.log('Provider saved to localStorage: outlook');
-
-        // Call the connect function directly
-        connectToOutlook();
-    });
-
-    yahooAuthBtn.addEventListener('click', function(e) {
-        // Prevent default to handle the auth flow ourselves
-        e.preventDefault();
-
-        const provider = this.getAttribute('data-provider');
-        console.log('Yahoo auth button clicked, provider:', provider);
-
-        // Store selected provider
-        localStorage.setItem('selectedDestinationProvider', 'yahoo');
-        console.log('Provider saved to localStorage: yahoo');
-
-        // Call the connect function directly
-        connectToYahoo();
-    });
-
-    // Initialize the global connect functions
-    window.connectToOutlook = function() {
-        console.log('Global connectToOutlook function called');
-        // This would be implemented with actual OAuth flow
-        // For now, we'll simulate a successful connection
-
-        setTimeout(() => {
-            // Update button to show connected state
+    // Set up Outlook button
+    if (outlookAuthBtn) {
+        if (outlookToken && outlookUserEmail) {
+            // Already connected to Outlook
             outlookAuthBtn.classList.add('connected');
             outlookAuthBtn.innerHTML = `
                 <img src="/static/img/microsoft-logo.svg" alt="Microsoft Logo" class="auth-button-icon">
-                <span>Connected to Microsoft</span>
+                <span style="flex: 1;">${outlookUserEmail}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" class="logout-icon">
+                    <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
+                </svg>
             `;
+            outlookAuthBtn.removeEventListener('click', connectToOutlook);
+            outlookAuthBtn.addEventListener('click', disconnectOutlook);
 
-            // Enable start migration button
-            const startMigrationBtn = document.getElementById('startMigration');
-            if (startMigrationBtn) {
-                startMigrationBtn.disabled = false;
+            // Hide Yahoo button if connected to Outlook
+            if (yahooAuthBtn) {
+                yahooAuthBtn.style.display = 'none';
             }
-        }, 1500);
-    };
 
-    window.connectToYahoo = function() {
-        console.log('Global connectToYahoo function called');
-        // This would be implemented with actual OAuth flow
-        // For now, we'll simulate a successful connection
+            isDestinationConnected = true;
+            updateStartButtonState();
+        } else {
+            // Not connected to Outlook
+            outlookAuthBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.setItem('selectedDestinationProvider', 'outlook');
+                connectToOutlook();
+            });
+        }
+    }
 
-        setTimeout(() => {
-            // Update button to show connected state
+    // Set up Yahoo button
+    if (yahooAuthBtn) {
+        if (yahooToken && yahooUserEmail) {
+            // Already connected to Yahoo
             yahooAuthBtn.classList.add('connected');
             yahooAuthBtn.innerHTML = `
                 <img src="/static/img/yahoo-white-icon.svg" alt="Yahoo Logo" class="auth-button-icon">
-                <span>Connected to Yahoo</span>
+                <span style="flex: 1;">${yahooUserEmail}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" class="logout-icon">
+                    <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
+                </svg>
             `;
+            yahooAuthBtn.removeEventListener('click', connectToYahoo);
+            yahooAuthBtn.addEventListener('click', disconnectYahoo);
 
-            // Enable start migration button
-            const startMigrationBtn = document.getElementById('startMigration');
-            if (startMigrationBtn) {
-                startMigrationBtn.disabled = false;
+            // Hide Outlook button if connected to Yahoo
+            if (outlookAuthBtn) {
+                outlookAuthBtn.style.display = 'none';
             }
-        }, 1500);
-    };
+
+            isDestinationConnected = true;
+            updateStartButtonState();
+        } else {
+            // Not connected to Yahoo
+            yahooAuthBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.setItem('selectedDestinationProvider', 'yahoo');
+                connectToYahoo();
+            });
+        }
+    }
 }
 
 function updateStartButtonTooltip() {
@@ -883,4 +931,422 @@ function updateMD3TooltipText() {
             }
         }
     }
+}
+
+// Function to get Outlook OAuth URL
+async function getOutlookOAuthUrl() {
+    try {
+        const response = await fetch('/outlook/auth-url', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.auth_url;
+    } catch (error) {
+        console.error('Error getting Outlook OAuth URL:', error);
+        logToConsole(`Error getting Outlook OAuth URL: ${error.message}`, 'error');
+        return null;
+    }
+}
+
+// Function to connect to Outlook
+async function connectToOutlook() {
+    console.log('Global connectToOutlook function called');
+    console.trace('Stacktrace for connectToOutlook call'); // Add stack trace to identify caller
+
+    // Clear any existing token for testing
+    localStorage.removeItem('outlookToken');
+    localStorage.removeItem('outlookRefreshToken');
+
+    // First check if user is already authenticated
+    const outlookToken = localStorage.getItem('outlookToken');
+    if (outlookToken) {
+        console.log('User already has an Outlook token, not starting OAuth flow');
+        return; // Prevent OAuth flow if already signed in
+    }
+
+    try {
+        logToConsole('Initiating Outlook OAuth flow...', 'info');
+
+        // Get the authorization URL
+        const authUrl = await getOutlookOAuthUrl();
+        console.log('Got Outlook auth URL:', authUrl);
+
+        if (authUrl) {
+            logToConsole('Redirecting to Outlook OAuth...', 'info');
+            window.location.href = authUrl;
+        } else {
+            throw new Error('Failed to get Outlook OAuth URL');
+        }
+    } catch (error) {
+        console.error('Error in connectToOutlook:', error);
+        logToConsole(`Error connecting to Outlook: ${error.message}`, 'error');
+    }
+}
+
+// Function to disconnect from Outlook
+function disconnectOutlook() {
+    console.log('Disconnecting from Outlook');
+    logToConsole('Disconnecting from Outlook...', 'info');
+
+    // Clear tokens from localStorage
+    localStorage.removeItem('outlookToken');
+    localStorage.removeItem('outlookRefreshToken');
+    localStorage.removeItem('outlookUserEmail');
+
+    // Update UI with isDisconnecting=true to prevent showing error message
+    updateUIAfterOutlookConnection(false, true);
+
+    // Update start button state
+    updateStartButtonState();
+
+    logToConsole('Disconnected from Outlook', 'success');
+}
+
+// Function to update UI after Outlook connection
+function updateUIAfterOutlookConnection(success, isDisconnecting = false) {
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+
+    if (success) {
+        // Get user email from localStorage or use a default
+        let outlookUserEmail = localStorage.getItem('outlookUserEmail');
+        console.log('Retrieved Outlook user email from localStorage:', outlookUserEmail);
+
+        // Make sure we have a valid email or default value
+        if (!outlookUserEmail || outlookUserEmail === 'undefined' || outlookUserEmail === 'null') {
+            console.warn('Invalid or missing email, using default');
+            outlookUserEmail = 'Microsoft Account';
+            localStorage.setItem('outlookUserEmail', outlookUserEmail);
+        }
+
+        // Update button to show connected state with user email
+        outlookAuthBtn.classList.add('connected');
+        outlookAuthBtn.innerHTML = `
+            <img src="/static/img/microsoft-logo.svg" alt="Microsoft Logo" class="auth-button-icon">
+            <span style="flex: 1;">${outlookUserEmail}</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" class="logout-icon">
+                <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
+            </svg>
+        `;
+
+        // Add click event to disconnect
+        outlookAuthBtn.removeEventListener('click', connectToOutlook);
+        outlookAuthBtn.addEventListener('click', disconnectOutlook);
+
+        // Hide Yahoo button when connected to Microsoft
+        if (yahooAuthBtn) {
+            yahooAuthBtn.style.display = 'none';
+        }
+
+        // Update state
+        isDestinationConnected = true;
+
+        // Enable start migration button if Gmail is also connected
+        updateStartButtonState();
+    } else {
+        // Only show error message if not intentionally disconnecting
+        if (!isDisconnecting && outlookAuthBtn) {
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'error-message';
+            errorMessage.textContent = 'Failed to connect to Outlook. Please try again.';
+            outlookAuthBtn.parentNode.appendChild(errorMessage);
+
+            // Remove the error message after 5 seconds
+            setTimeout(() => {
+                if (errorMessage.parentNode === outlookAuthBtn.parentNode) {
+                    outlookAuthBtn.parentNode.removeChild(errorMessage);
+                }
+            }, 5000);
+        }
+
+        // Clear any stored tokens
+        localStorage.removeItem('outlookToken');
+        localStorage.removeItem('outlookRefreshToken');
+        localStorage.removeItem('outlookUserEmail');
+
+        // Reset the button
+        if (outlookAuthBtn) {
+            outlookAuthBtn.classList.remove('connected');
+            outlookAuthBtn.innerHTML = `
+                <img src="/static/img/microsoft-logo.svg" alt="Microsoft Logo" class="auth-button-icon">
+                <span>Sign in with Microsoft</span>
+            `;
+
+            // Add click event to connect
+            outlookAuthBtn.removeEventListener('click', disconnectOutlook);
+            outlookAuthBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.setItem('selectedDestinationProvider', 'outlook');
+                connectToOutlook();
+            });
+        }
+
+        // Show Yahoo button when disconnected from Microsoft
+        if (yahooAuthBtn) {
+            yahooAuthBtn.style.display = '';
+        }
+    }
+}
+
+// Function to update the start button state
+function updateStartButtonState() {
+    const startMigrationBtn = document.getElementById('startMigration');
+    if (startMigrationBtn) {
+        const isGmailConnected = localStorage.getItem('gmailToken') !== null;
+        const isDestinationConnected =
+            localStorage.getItem('outlookToken') !== null ||
+            localStorage.getItem('yahooToken') !== null;
+
+        startMigrationBtn.disabled = !(isGmailConnected && isDestinationConnected);
+
+        // Update tooltip
+        updateStartButtonTooltip();
+    }
+}
+
+// Function to initialize OAuth settings modal
+function initializeOAuthSettingsModal() {
+    console.log('Initializing OAuth settings modal...');
+
+    const oauthSettingsBtn = document.getElementById('oauthSettingsBtn');
+    const oauthSettingsModal = document.getElementById('oauthSettingsModal');
+    const closeModal = document.querySelector('.close-modal');
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    if (!oauthSettingsBtn || !oauthSettingsModal) {
+        console.error('OAuth settings modal elements not found');
+        return;
+    }
+
+    // Open modal when settings button is clicked
+    oauthSettingsBtn.addEventListener('click', function() {
+        oauthSettingsModal.style.display = 'block';
+    });
+
+    // Close modal when close button is clicked
+    if (closeModal) {
+        closeModal.addEventListener('click', function() {
+            oauthSettingsModal.style.display = 'none';
+        });
+    }
+
+    // Close modal when clicking outside of it
+    window.addEventListener('click', function(event) {
+        if (event.target === oauthSettingsModal) {
+            oauthSettingsModal.style.display = 'none';
+        }
+    });
+
+    // Tab functionality
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const tab = this.getAttribute('data-tab');
+
+            // Remove active class from all buttons and contents
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Add active class to current button and content
+            this.classList.add('active');
+            document.getElementById(`${tab}-tab`).classList.add('active');
+        });
+    });
+
+    // Initialize form values from localStorage if available
+    const gmailClientId = localStorage.getItem('gmailClientId');
+    const gmailClientSecret = localStorage.getItem('gmailClientSecret');
+    const gmailRedirectUri = localStorage.getItem('gmailRedirectUri');
+
+    const outlookClientId = localStorage.getItem('outlookClientId');
+    const outlookClientSecret = localStorage.getItem('outlookClientSecret');
+    const outlookRedirectUri = localStorage.getItem('outlookRedirectUri');
+
+    const yahooClientId = localStorage.getItem('yahooClientId');
+    const yahooClientSecret = localStorage.getItem('yahooClientSecret');
+    const yahooRedirectUri = localStorage.getItem('yahooRedirectUri');
+
+    // Set form values if available
+    if (gmailClientId) document.getElementById('gmailClientId').value = gmailClientId;
+    if (gmailClientSecret) document.getElementById('gmailClientSecret').value = gmailClientSecret;
+    if (gmailRedirectUri) document.getElementById('gmailRedirectUri').value = gmailRedirectUri;
+
+    if (outlookClientId) document.getElementById('outlookClientId').value = outlookClientId;
+    if (outlookClientSecret) document.getElementById('outlookClientSecret').value = outlookClientSecret;
+    if (outlookRedirectUri) document.getElementById('outlookRedirectUri').value = outlookRedirectUri;
+
+    if (yahooClientId) document.getElementById('yahooClientId').value = yahooClientId;
+    if (yahooClientSecret) document.getElementById('yahooClientSecret').value = yahooClientSecret;
+    if (yahooRedirectUri) document.getElementById('yahooRedirectUri').value = yahooRedirectUri;
+
+    // Handle form submissions
+    const gmailOAuthForm = document.getElementById('gmailOAuthForm');
+    const outlookOAuthForm = document.getElementById('outlookOAuthForm');
+    const yahooOAuthForm = document.getElementById('yahooOAuthForm');
+
+    if (gmailOAuthForm) {
+        gmailOAuthForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const clientId = document.getElementById('gmailClientId').value;
+            const clientSecret = document.getElementById('gmailClientSecret').value;
+            const redirectUri = document.getElementById('gmailRedirectUri').value;
+
+            localStorage.setItem('gmailClientId', clientId);
+            localStorage.setItem('gmailClientSecret', clientSecret);
+            localStorage.setItem('gmailRedirectUri', redirectUri);
+
+            alert('Gmail OAuth settings saved!');
+        });
+    }
+
+    if (outlookOAuthForm) {
+        outlookOAuthForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const clientId = document.getElementById('outlookClientId').value;
+            const clientSecret = document.getElementById('outlookClientSecret').value;
+            const redirectUri = document.getElementById('outlookRedirectUri').value;
+
+            localStorage.setItem('outlookClientId', clientId);
+            localStorage.setItem('outlookClientSecret', clientSecret);
+            localStorage.setItem('outlookRedirectUri', redirectUri);
+
+            alert('Outlook OAuth settings saved!');
+        });
+    }
+
+    if (yahooOAuthForm) {
+        yahooOAuthForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const clientId = document.getElementById('yahooClientId').value;
+            const clientSecret = document.getElementById('yahooClientSecret').value;
+            const redirectUri = document.getElementById('yahooRedirectUri').value;
+
+            localStorage.setItem('yahooClientId', clientId);
+            localStorage.setItem('yahooClientSecret', clientSecret);
+            localStorage.setItem('yahooRedirectUri', redirectUri);
+
+            alert('Yahoo OAuth settings saved!');
+        });
+    }
+}
+
+// Function to connect to Yahoo
+function connectToYahoo() {
+    console.log('Connecting to Yahoo');
+    logToConsole('Connecting to Yahoo...', 'info');
+
+    // Simulate successful connection for now
+    // In a real implementation, this would involve OAuth flow
+    setTimeout(() => {
+        // Store a dummy token
+        localStorage.setItem('yahooToken', 'dummy-yahoo-token');
+        localStorage.setItem('yahooUserEmail', 'user@yahoo.com');
+
+        // Update UI
+        updateUIAfterYahooConnection(true);
+
+        logToConsole('Connected to Yahoo', 'success');
+    }, 1500);
+}
+
+// Function to update UI after Yahoo connection
+function updateUIAfterYahooConnection(success, isDisconnecting = false) {
+    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
+    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
+
+    if (success) {
+        // Update button to show connected state
+        yahooAuthBtn.classList.add('connected');
+        yahooAuthBtn.innerHTML = `
+            <img src="/static/img/yahoo-white-icon.svg" alt="Yahoo Logo" class="auth-button-icon">
+            <span style="flex: 1;">Yahoo Account</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368" class="logout-icon">
+                <path d="M5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5V5zm16 7l-4-4v3H9v2h8v3l4-4z"></path>
+            </svg>
+        `;
+
+        // Add click event to disconnect
+        yahooAuthBtn.removeEventListener('click', connectToYahoo);
+        yahooAuthBtn.addEventListener('click', disconnectYahoo);
+
+        // Hide Microsoft button when connected to Yahoo
+        if (outlookAuthBtn) {
+            outlookAuthBtn.style.display = 'none';
+        }
+
+        // Update state
+        isDestinationConnected = true;
+
+        // Enable start migration button if Gmail is also connected
+        updateStartButtonState();
+    } else {
+        // Only show error message if not intentionally disconnecting
+        if (!isDisconnecting && yahooAuthBtn) {
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'error-message';
+            errorMessage.textContent = 'Failed to connect to Yahoo. Please try again.';
+            yahooAuthBtn.parentNode.appendChild(errorMessage);
+
+            // Remove the error message after 5 seconds
+            setTimeout(() => {
+                if (errorMessage.parentNode === yahooAuthBtn.parentNode) {
+                    yahooAuthBtn.parentNode.removeChild(errorMessage);
+                }
+            }, 5000);
+        }
+
+        // Clear any stored tokens
+        localStorage.removeItem('yahooToken');
+        localStorage.removeItem('yahooRefreshToken');
+        localStorage.removeItem('yahooUserEmail');
+
+        // Reset the button
+        if (yahooAuthBtn) {
+            yahooAuthBtn.classList.remove('connected');
+            yahooAuthBtn.innerHTML = `
+                <img src="/static/img/yahoo-white-icon.svg" alt="Yahoo Logo" class="auth-button-icon">
+                <span>Sign in with Yahoo</span>
+            `;
+
+            // Add click event to connect
+            yahooAuthBtn.removeEventListener('click', disconnectYahoo);
+            yahooAuthBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.setItem('selectedDestinationProvider', 'yahoo');
+                connectToYahoo();
+            });
+        }
+
+        // Show Microsoft button when disconnected from Yahoo
+        if (outlookAuthBtn) {
+            outlookAuthBtn.style.display = '';
+        }
+    }
+}
+
+// Function to disconnect from Yahoo
+function disconnectYahoo() {
+    console.log('Disconnecting from Yahoo');
+    logToConsole('Disconnecting from Yahoo...', 'info');
+
+    // Clear tokens from localStorage
+    localStorage.removeItem('yahooToken');
+    localStorage.removeItem('yahooRefreshToken');
+    localStorage.removeItem('yahooUserEmail');
+
+    // Update UI with isDisconnecting=true to prevent showing error message
+    updateUIAfterYahooConnection(false, true);
+
+    // Update start button state
+    updateStartButtonState();
+
+    logToConsole('Disconnected from Yahoo', 'success');
 }
