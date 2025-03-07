@@ -8,18 +8,11 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+    env_file:
+      - .env
     environment:
       - DEBUG=True
       - LOG_LEVEL=INFO
-      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
-      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
-      - GMAIL_REDIRECT_URI=${GMAIL_REDIRECT_URI}
-      - OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID}
-      - OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET}
-      - OUTLOOK_REDIRECT_URI=${OUTLOOK_REDIRECT_URI}
-      - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID}
-      - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET}
-      - YAHOO_REDIRECT_URI=${YAHOO_REDIRECT_URI}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

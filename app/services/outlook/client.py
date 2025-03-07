@@ -1,18 +1,19 @@
 """Outlook client for Microsoft Graph API interactions."""
 
 import base64
+import json
 import logging
 import mimetypes
 from typing import Any
 
-import requests
-from fastapi import HTTPException
+import httpx
+from fastapi import HTTPException, status
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 # Microsoft Graph API base URL
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
 class OutlookClient:
@@ -30,48 +31,115 @@ class OutlookClient:
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
+        logger.info("Initialized OutlookClient")
 
     def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: dict[str, Any] | None = None,
-        request_data: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        self, method: str, endpoint: str, data: dict = None, params: dict = None
+    ) -> dict:
         """
         Make a request to the Microsoft Graph API.
 
         Args:
-            method: HTTP method
-            endpoint: API endpoint
-            params: Query parameters
-            request_data: Request body and headers combined
+            method: The HTTP method to use
+            endpoint: The API endpoint to call
+            data: The data to send in the request body
+            params: The query parameters to include in the request
 
         Returns:
-            Dict[str, Any]: API response
+            dict: The response from the API
+
+        Raises:
+            HTTPException: If the request fails
         """
-        url = f"{GRAPH_API_BASE}{endpoint}"
+        url = f"{GRAPH_API_BASE_URL}{endpoint}"
 
-        # Extract headers from request_data if provided
-        headers = self.headers.copy()
-        data = None
+        def raise_unsupported_method(method_name: str) -> None:
+            """Raise ValueError for unsupported HTTP method."""
+            error_msg = f"Unsupported HTTP method: {method_name}"
+            raise ValueError(error_msg)
 
-        if request_data:
-            if "headers" in request_data:
-                headers.update(request_data.pop("headers"))
-            data = request_data
+        def handle_http_error(error: httpx.HTTPStatusError) -> None:
+            """Handle HTTP errors and raise appropriate exceptions."""
+            logger.exception("HTTP error occurred")
+
+            # Handle specific error codes
+            if error.response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed. Please sign in again.",
+                ) from error
+
+            if error.response.status_code == 403:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to access this resource.",
+                ) from error
+
+            if error.response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="The requested resource was not found.",
+                ) from error
+
+            # Try to parse the error response
+            try:
+                error_data = error.response.json()
+                error_message = error_data.get("error", {}).get(
+                    "message", "Unknown error"
+                )
+                raise HTTPException(
+                    status_code=error.response.status_code,
+                    detail=f"Microsoft Graph API error: {error_message}",
+                ) from error
+            except json.JSONDecodeError:
+                # If we can't parse the error response, use the status code and text
+                raise HTTPException(
+                    status_code=error.response.status_code,
+                    detail=f"Microsoft Graph API error: {error.response.text}",
+                ) from error
 
         try:
-            response = requests.request(
-                method, url, params=params, json=data, headers=headers, timeout=30
-            )
+            logger.info(f"Making {method} request to {url}")
+
+            with httpx.Client(timeout=30.0) as client:
+                if method.upper() == "GET":
+                    response = client.get(url, headers=self.headers, params=params)
+                elif method.upper() == "POST":
+                    response = client.post(
+                        url, headers=self.headers, json=data, params=params
+                    )
+                elif method.upper() == "PUT":
+                    response = client.put(
+                        url, headers=self.headers, json=data, params=params
+                    )
+                elif method.upper() == "DELETE":
+                    response = client.delete(url, headers=self.headers, params=params)
+                else:
+                    raise_unsupported_method(method)
+
+            # Check if the request was successful
             response.raise_for_status()
-            return response.json() if response.content else {}
-        except requests.RequestException as e:
-            logger.exception(f"Error making request to {endpoint}")
+
+            # Parse the response
+            if response.content:
+                return response.json()
+            return {}
+
+        except httpx.HTTPStatusError as e:
+            handle_http_error(e)
+
+        except httpx.RequestError as e:
+            logger.exception("Request error occurred")
             raise HTTPException(
-                status_code=response.status_code if "response" in locals() else 500,
-                detail=str(e),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Error connecting to Microsoft Graph API: {str(e)}",
+            ) from e
+
+        except Exception as e:
+            logger.exception("Unexpected error occurred")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Unexpected error: {str(e)}",
             ) from e
 
     def get_mailbox_info(self) -> dict[str, Any]:
@@ -397,3 +465,58 @@ class OutlookClient:
                 )
 
         return message
+
+    def get_user_profile(self) -> dict:
+        """
+        Get the user's profile information.
+
+        Returns:
+            dict: The user's profile information
+
+        Raises:
+            HTTPException: If the request fails
+        """
+        try:
+            logger.info("Getting user profile")
+            response = self._make_request(
+                "GET", "/me?$select=displayName,mail,userPrincipalName,id,otherMails"
+            )
+
+            # Log the fields that might contain email addresses
+            email_fields = []
+            if "mail" in response:
+                email_fields.append(f"mail: {response.get('mail')}")
+            if "userPrincipalName" in response:
+                email_fields.append(
+                    f"userPrincipalName: {response.get('userPrincipalName')}"
+                )
+            if "otherMails" in response and response["otherMails"]:
+                email_fields.append(f"otherMails: {response.get('otherMails')}")
+
+            if email_fields:
+                logger.info(f"Found email fields: {', '.join(email_fields)}")
+            else:
+                logger.warning("No email fields found in user profile")
+
+            return response
+        except Exception:
+            logger.exception("Error fetching user profile")
+
+            # If full profile fails, try to get just the email
+            try:
+                logger.info("Trying to get just the email")
+                email_response = self._make_request(
+                    "GET", "/me?$select=mail,userPrincipalName,id,displayName"
+                )
+                logger.info(f"Email response: {email_response}")
+                return email_response
+            except Exception:
+                logger.exception("Error fetching email")
+
+                # If all else fails, return a minimal profile with default values
+                return {
+                    "id": "unknown",
+                    "displayName": "Microsoft User",
+                    "mail": None,
+                    "userPrincipalName": None,
+                }
