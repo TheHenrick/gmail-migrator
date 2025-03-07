@@ -10,127 +10,170 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Add meta tag for Google client ID -->
     <meta name="google-signin-client_id" content="{{ gmail_client_id }}">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Gmail Migrator</h1>
-            <p class="subtitle">Transfer your emails to a new service</p>
+            <p class="subtitle">Move your emails to Microsoft or Yahoo</p>
         </header>
 
         <main>
             <section class="card migrate-card">
-                <h2>Start Migration</h2>
-                <p>Connect your accounts and begin transferring your emails to a new service.</p>
+                <h2>Connect Accounts</h2>
+                <p>Sign in to your accounts to begin the migration process.</p>
 
-                <div class="source-section">
-                    <h3>Source Account: Gmail</h3>
+                <div class="auth-sections-row">
+                    <div class="source-section">
+                        <h3>Source</h3>
 
-                    <!-- Gmail Auth container -->
-                    <div id="googleSignInButtonContainer" class="google-signin-container">
-                        <!-- Apple HIG-styled Gmail OAuth button -->
-                        <button id="directGmailAuthBtn" class="button gmail-auth-button" onclick="console.log('Button clicked directly'); connectToGmail();">
-                            <div class="auth-button-content">
-                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" class="auth-button-icon">
-                                <span class="auth-button-text">Sign in with Google</span>
+                        <!-- Gmail Auth container -->
+                        <div class="account-selector">
+                            <div id="googleSignInButtonContainer" class="google-signin-container">
+                                <!-- Google button will be created dynamically in JavaScript -->
                             </div>
-                        </button>
-                        <p class="auth-description">Connect to your Gmail account to migrate emails</p>
-                    </div>
-                </div>
-
-                <div class="destination-section">
-                    <h3>Destination Account</h3>
-                    <div class="account-selector">
-                        <div class="account-option" data-provider="outlook">
-                            <img src="{{ url_for('static', path='/img/outlook.svg') }}" alt="Outlook" class="service-icon">
-                            <span>Outlook</span>
-                        </div>
-                        <div class="account-option" data-provider="yahoo">
-                            <img src="{{ url_for('static', path='/img/yahoo.svg') }}" alt="Yahoo Mail" class="service-icon">
-                            <span>Yahoo Mail</span>
                         </div>
                     </div>
 
-                    <button class="button secondary" id="connectDestination" disabled>Connect Destination</button>
+                    <div class="destination-section">
+                        <h3>Destination</h3>
+
+                        <!-- Direct Auth Buttons for Destination Selection -->
+                        <div class="account-selector">
+                            <!-- Microsoft Auth Button -->
+                            <button id="outlookAuthBtn" class="microsoft-auth-button" data-provider="outlook">
+                                <img src="{{ url_for('static', path='/img/microsoft-logo.svg') }}" alt="Microsoft Logo" class="auth-button-icon">
+                                <span>Sign in with Microsoft</span>
+                            </button>
+
+                            <!-- Yahoo Auth Button -->
+                            <button id="yahooAuthBtn" class="yahoo-auth-button" data-provider="yahoo">
+                                <img src="{{ url_for('static', path='/img/yahoo-white-icon.svg') }}" alt="Yahoo Logo" class="auth-button-icon">
+                                <span>Sign in with Yahoo</span>
+                            </button>
+                        </div>
+
+                        <!-- Removing the now redundant Select Destination button -->
+                        <!-- Destination Auth Buttons Container - Now hidden as we're using direct buttons -->
+                        <div id="destinationAuthContainer" class="destination-auth-container" style="display: none;">
+                            <!-- Microsoft Auth Section (Hidden) -->
+                            <div id="outlookAuthSection" class="provider-connection disconnected" style="display: none;">
+                                <div class="provider-header">
+                                    <img src="{{ url_for('static', path='/img/outlook.svg') }}" alt="Microsoft Logo" class="provider-icon">
+                                    <span class="provider-name">Microsoft Outlook</span>
+                                    <span class="provider-status disconnected">
+                                        <i class="fas fa-circle"></i> Not Connected
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Yahoo Auth Section (Hidden) -->
+                            <div id="yahooAuthSection" class="provider-connection disconnected" style="display: none;">
+                                <div class="provider-header">
+                                    <img src="{{ url_for('static', path='/img/yahoo.svg') }}" alt="Yahoo Logo" class="provider-icon">
+                                    <span class="provider-name">Yahoo Mail</span>
+                                    <span class="provider-status disconnected">
+                                        <i class="fas fa-circle"></i> Not Connected
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
             <section class="card options-card">
-                <h2>Migration Options</h2>
+                <h2>Options</h2>
 
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="preserveFolders" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Preserve Folders</h4>
-                        <p>Keep your folder structure intact when transferring emails</p>
-                    </div>
-                </div>
-
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="includeAttachments" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Include Attachments</h4>
-                        <p>Transfer attachments along with email content</p>
-                    </div>
-                </div>
-
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="onlyUnread">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Only Unread Emails</h4>
-                        <p>Transfer only unread emails</p>
-                    </div>
-                </div>
-
-                <div class="date-filter">
-                    <h4>Date Range (Optional)</h4>
-                    <div class="date-inputs">
-                        <div class="date-field">
-                            <label for="startDate">From</label>
-                            <input type="date" id="startDate">
+                <div class="options-row">
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="preserveFolders" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Preserve Folders</h4>
+                            <p>Maintain your existing folder structure</p>
                         </div>
-                        <div class="date-field">
-                            <label for="endDate">To</label>
-                            <input type="date" id="endDate">
+                    </div>
+
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="includeAttachments" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Include Attachments</h4>
+                            <p>Transfer files attached to emails</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="option-item">
-                    <label class="toggle">
-                        <input type="checkbox" id="batchProcessing" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="option-text">
-                        <h4>Batch Processing</h4>
-                        <p>Process emails in batches to manage memory usage</p>
-                    </div>
+                <!-- Advanced Options Toggle -->
+                <div class="advanced-options-toggle" id="advancedOptionsToggle">
+                    <h3>Advanced</h3>
+                    <i class="fas fa-chevron-down chevron"></i>
                 </div>
 
-                <div id="batchSizeContainer" class="option-item">
-                    <div class="batch-size-slider">
-                        <label for="batchSizeSlider">Batch Size: <span id="batchSizeValue">50 emails</span></label>
-                        <input type="range" id="batchSizeSlider" min="10" max="200" step="10" value="50">
+                <!-- Advanced Options Section (Hidden by default) -->
+                <div class="advanced-options" id="advancedOptions">
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="onlyUnread">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Only Unread</h4>
+                            <p>Transfer only unread emails</p>
+                        </div>
                     </div>
-                </div>
 
-                <!-- OAuth Settings Button -->
-                <div class="option-item">
-                    <button id="oauthSettingsBtn" class="button secondary">OAuth Settings</button>
+                    <div class="date-filter">
+                        <h4>Date Range</h4>
+                        <div class="date-inputs">
+                            <div class="date-field">
+                                <label for="startDate">From</label>
+                                <input type="date" id="startDate">
+                            </div>
+                            <div class="date-field">
+                                <label for="endDate">To</label>
+                                <input type="date" id="endDate">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="option-item">
+                        <label class="toggle">
+                            <input type="checkbox" id="batchProcessing" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="option-text">
+                            <h4>Batch Processing</h4>
+                            <p>Process emails in groups for better performance</p>
+                        </div>
+                    </div>
+
+                    <div id="batchSizeContainer" class="option-item">
+                        <div class="batch-size-slider">
+                            <label for="batchSizeSlider">Batch Size: <span id="batchSizeValue">50 emails</span></label>
+                            <input type="range" id="batchSizeSlider" min="10" max="200" step="10" value="50">
+                        </div>
+                    </div>
+
+                    <!-- OAuth Settings Button -->
+                    <div class="option-item">
+                        <button id="oauthSettingsBtn" class="button secondary">
+                            <i class="fas fa-cog"></i> API Settings
+                        </button>
+                    </div>
                 </div>
             </section>
 
-            <button class="button primary start-button" id="startMigration" disabled>Start Migration</button>
+            <button class="button primary start-button" id="startMigration" disabled data-tooltip="Please connect both source and destination accounts to start migration">
+                <i class="fas fa-play"></i> Start Migration
+            </button>
 
             <!-- Migration Status Section (Hidden by default) -->
             <section class="migration-status" id="migrationStatus">
@@ -152,7 +195,7 @@
                 <div class="migration-details">
                     <div class="migration-summary">
                         <div class="summary-card success">
-                            <h3>Successfully Migrated</h3>
+                            <h3>Completed</h3>
                             <div class="number" id="successCount">0</div>
                         </div>
                         <div class="summary-card pending">
@@ -165,16 +208,22 @@
                         </div>
                     </div>
 
-                    <h3>Migration Log</h3>
+                    <h3>Log</h3>
                     <div class="migration-log" id="migrationLog">
                         <!-- Log entries will be added here dynamically -->
                     </div>
                 </div>
 
                 <div class="action-buttons">
-                    <button class="button primary" id="pauseResumeMigration">Pause Migration</button>
-                    <button class="button danger" id="cancelMigration">Cancel Migration</button>
-                    <button class="button success" id="downloadReport" disabled>Download Report</button>
+                    <button class="button primary" id="pauseResumeMigration">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button class="button danger" id="cancelMigration">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button class="button success" id="downloadReport" disabled>
+                        <i class="fas fa-download"></i> Download Report
+                    </button>
                 </div>
             </section>
 
@@ -182,8 +231,8 @@
             <div id="oauthSettingsModal" class="modal">
                 <div class="modal-content">
                     <span class="close-modal">&times;</span>
-                    <h2>OAuth Settings</h2>
-                    <p class="modal-description">Configure OAuth credentials for each service. These are necessary for authentication.</p>
+                    <h2>API Settings</h2>
+                    <p class="modal-description">Enter your OAuth credentials for each service.</p>
 
                     <div class="tabs">
                         <button class="tab-button active" data-tab="gmail">Gmail</button>
@@ -195,17 +244,17 @@
                         <form id="gmailOAuthForm" class="oauth-form">
                             <div class="form-group">
                                 <label for="gmailClientId">Client ID</label>
-                                <input type="text" id="gmailClientId" name="clientId" placeholder="Your Gmail OAuth Client ID">
+                                <input type="text" id="gmailClientId" name="clientId" placeholder="Gmail OAuth Client ID">
                             </div>
                             <div class="form-group">
                                 <label for="gmailClientSecret">Client Secret</label>
-                                <input type="password" id="gmailClientSecret" name="clientSecret" placeholder="Your Gmail OAuth Client Secret">
+                                <input type="password" id="gmailClientSecret" name="clientSecret" placeholder="Gmail OAuth Client Secret">
                             </div>
                             <div class="form-group">
                                 <label for="gmailRedirectUri">Redirect URI</label>
                                 <input type="text" id="gmailRedirectUri" name="redirectUri" placeholder="http://localhost:8000/gmail/auth-callback">
                             </div>
-                            <button type="submit" class="button primary">Save Gmail Settings</button>
+                            <button type="submit" class="button primary">Save</button>
                         </form>
                     </div>
 
@@ -213,17 +262,17 @@
                         <form id="outlookOAuthForm" class="oauth-form">
                             <div class="form-group">
                                 <label for="outlookClientId">Client ID</label>
-                                <input type="text" id="outlookClientId" name="clientId" placeholder="Your Outlook OAuth Client ID">
+                                <input type="text" id="outlookClientId" name="clientId" placeholder="Outlook OAuth Client ID">
                             </div>
                             <div class="form-group">
                                 <label for="outlookClientSecret">Client Secret</label>
-                                <input type="password" id="outlookClientSecret" name="clientSecret" placeholder="Your Outlook OAuth Client Secret">
+                                <input type="password" id="outlookClientSecret" name="clientSecret" placeholder="Outlook OAuth Client Secret">
                             </div>
                             <div class="form-group">
                                 <label for="outlookRedirectUri">Redirect URI</label>
                                 <input type="text" id="outlookRedirectUri" name="redirectUri" placeholder="http://localhost:8000/outlook/auth-callback">
                             </div>
-                            <button type="submit" class="button primary">Save Outlook Settings</button>
+                            <button type="submit" class="button primary">Save</button>
                         </form>
                     </div>
 
@@ -231,17 +280,17 @@
                         <form id="yahooOAuthForm" class="oauth-form">
                             <div class="form-group">
                                 <label for="yahooClientId">Client ID</label>
-                                <input type="text" id="yahooClientId" name="clientId" placeholder="Your Yahoo OAuth Client ID">
+                                <input type="text" id="yahooClientId" name="clientId" placeholder="Yahoo OAuth Client ID">
                             </div>
                             <div class="form-group">
                                 <label for="yahooClientSecret">Client Secret</label>
-                                <input type="password" id="yahooClientSecret" name="clientSecret" placeholder="Your Yahoo OAuth Client Secret">
+                                <input type="password" id="yahooClientSecret" name="clientSecret" placeholder="Yahoo OAuth Client Secret">
                             </div>
                             <div class="form-group">
                                 <label for="yahooRedirectUri">Redirect URI</label>
                                 <input type="text" id="yahooRedirectUri" name="redirectUri" placeholder="http://localhost:8000/yahoo/auth-callback">
                             </div>
-                            <button type="submit" class="button primary">Save Yahoo Settings</button>
+                            <button type="submit" class="button primary">Save</button>
                         </form>
                     </div>
                 </div>
