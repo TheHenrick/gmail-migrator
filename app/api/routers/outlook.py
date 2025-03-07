@@ -1,7 +1,6 @@
 """Router for Outlook-related API endpoints."""
 
 import base64
-import json
 import logging
 from typing import Annotated, Any
 from urllib.parse import quote
@@ -16,7 +15,6 @@ from app.services.gmail.client import GmailClient
 from app.services.outlook.auth import OutlookAuthManager
 from app.services.outlook.auth import oauth_flow as outlook_oauth_flow
 from app.services.outlook.client import OutlookClient
-from app.config import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -100,6 +98,110 @@ class AuthCodeRequest(BaseModel):
     code: str
 
 
+def _handle_oauth_error(error_msg: str) -> RedirectResponse:
+    """
+    Handle OAuth error by redirecting to the main page with error message.
+
+    Args:
+        error_msg: The error message to include in the redirect
+
+    Returns:
+        RedirectResponse: Redirect to the main page with error parameter
+    """
+    logger.error(f"OAuth error: {error_msg}")
+    return RedirectResponse(url=f"/?error=outlook_auth_failed&message={error_msg}")
+
+
+def _extract_email_from_token(token_info: dict[str, Any]) -> str:
+    """
+    Extract email from token data.
+
+    Args:
+        token_info: The token information containing the access token
+
+    Returns:
+        str: The extracted email or default value
+    """
+    user_email = "Microsoft Account"  # Default value
+
+    try:
+        # JWT tokens are in the format header.payload.signature
+        # We only need the payload part
+        token_parts = token_info["access_token"].split(".")
+        if len(token_parts) >= 2:
+            # Add padding if needed
+            payload = token_parts[1]
+            payload += "=" * ((4 - len(payload) % 4) % 4)
+
+            # Decode the base64 payload
+            decoded_payload = base64.b64decode(payload)
+            token_data = jwt.decode(
+                decoded_payload, options={"verify_signature": False}
+            )
+
+            logger.info(f"Decoded token data: {token_data}")
+
+            # Try to extract email from token
+            if "email" in token_data:
+                user_email = token_data["email"]
+                logger.info(f"Found email in token: {user_email}")
+            elif "upn" in token_data:
+                user_email = token_data["upn"]
+                logger.info(f"Found UPN in token: {user_email}")
+            elif "unique_name" in token_data:
+                user_email = token_data["unique_name"]
+                logger.info(f"Found unique_name in token: {user_email}")
+    except Exception:
+        logger.exception("Could not decode token")
+
+    return user_email
+
+
+def _get_user_profile_email(token: str) -> str:
+    """
+    Get user email from Microsoft Graph API.
+
+    Args:
+        token: The access token for the Microsoft Graph API
+
+    Returns:
+        str: The user's email or default value
+    """
+    user_email = "Microsoft Account"  # Default value
+
+    try:
+        # Create a client with the token
+        client = OutlookClient(token)
+        # Get user profile information
+        user_info = client.get_user_profile()
+        logger.info(f"User profile keys: {user_info.keys()}")
+
+        # Try different fields that might contain the email
+        if user_info.get("mail"):
+            user_email = user_info["mail"]
+            logger.info(f"Using mail field: {user_email}")
+        elif user_info.get("userPrincipalName"):
+            user_email = user_info["userPrincipalName"]
+            logger.info(f"Using userPrincipalName field: {user_email}")
+        elif user_info.get("otherMails") and len(user_info["otherMails"]) > 0:
+            user_email = user_info["otherMails"][0]
+            logger.info(f"Using otherMails field: {user_email}")
+        else:
+            logger.warning("No email field found in user profile")
+            # Try to extract from any field that might look like an email
+            for key, value in user_info.items():
+                if isinstance(value, str) and "@" in value:
+                    user_email = value
+                    logger.info(f"Found email-like value in {key}: {user_email}")
+                    break
+
+        logger.info(f"Final user email: {user_email}")
+    except Exception:
+        logger.exception("Could not get user profile")
+
+    return user_email
+
+
 @router.post("/auth-url", response_model=dict[str, str])
 async def get_auth_url(
     config: OAuthConfig | None = None,
@@ -143,7 +245,7 @@ async def auth_callback_get(
     config: OAuthConfig | None = None,
 ) -> RedirectResponse:
     """
-    Handle the OAuth callback from Outlook with a GET request and redirect to the main page.
+    Handle OAuth callback from Outlook with GET request and redirect to main page.
 
     Args:
         code: Authorization code from OAuth provider
@@ -156,14 +258,13 @@ async def auth_callback_get(
     try:
         logger.info("Processing Outlook OAuth callback (GET)")
 
+        # Handle error parameter if present
         if error:
-            logger.error(f"OAuth error: {error}")
-            # Redirect to main page with error parameter
-            return RedirectResponse(url=f"/?error=outlook_auth_failed&message={error}")
+            return _handle_oauth_error(error)
 
+        # Check if code is provided
         if not code:
             logger.error("No authorization code provided")
-            # Redirect to main page with error parameter
             return RedirectResponse(url="/?error=outlook_auth_failed&message=no_code")
 
         logger.info(f"Received authorization code: {code[:10]}...")
@@ -181,70 +282,14 @@ async def auth_callback_get(
         token_info = flow_instance.exchange_code(code)
         logger.info(f"Received token info: {token_info.keys()}")
 
-        # Try to decode the access token to get user information
-        user_email = "Microsoft Account"  # Default value
+        # Try to get user email from token or profile
+        user_email = _extract_email_from_token(token_info)
 
-        # Try to decode the JWT token
-        try:
-            # JWT tokens are in the format header.payload.signature
-            # We only need the payload part
-            token_parts = token_info["access_token"].split(".")
-            if len(token_parts) >= 2:
-                # Add padding if needed
-                payload = token_parts[1]
-                payload += "=" * ((4 - len(payload) % 4) % 4)
-
-                # Decode the base64 payload
-                decoded_payload = base64.b64decode(payload)
-                token_data = jwt.decode(
-                    decoded_payload, options={"verify_signature": False}
-                )
-
-                logger.info(f"Decoded token data: {token_data}")
-
-                # Try to extract email from token
-                if "email" in token_data:
-                    user_email = token_data["email"]
-                    logger.info(f"Found email in token: {user_email}")
-                elif "upn" in token_data:
-                    user_email = token_data["upn"]
-                    logger.info(f"Found UPN in token: {user_email}")
-                elif "unique_name" in token_data:
-                    user_email = token_data["unique_name"]
-                    logger.info(f"Found unique_name in token: {user_email}")
-        except Exception:
-            logger.exception("Could not decode token")
-
-        # Get user information from Microsoft Graph API
-        try:
-            # Create a client with the new token
-            client = OutlookClient(token_info["access_token"])
-            # Get user profile information
-            user_info = client.get_user_profile()
-            logger.info(f"User profile keys: {user_info.keys()}")
-
-            # Try different fields that might contain the email
-            if user_info.get("mail"):
-                user_email = user_info["mail"]
-                logger.info(f"Using mail field: {user_email}")
-            elif user_info.get("userPrincipalName"):
-                user_email = user_info["userPrincipalName"]
-                logger.info(f"Using userPrincipalName field: {user_email}")
-            elif user_info.get("otherMails") and len(user_info["otherMails"]) > 0:
-                user_email = user_info["otherMails"][0]
-                logger.info(f"Using otherMails field: {user_email}")
-            else:
-                logger.warning("No email field found in user profile")
-                # Try to extract from any field that might look like an email
-                for key, value in user_info.items():
-                    if isinstance(value, str) and "@" in value:
-                        user_email = value
-                        logger.info(f"Found email-like value in {key}: {user_email}")
-                        break
-
-            logger.info(f"Final user email: {user_email}")
-        except Exception:
-            logger.exception("Could not get user profile")
+        # If we couldn't get email from token, try to get it from profile
+        if user_email == "Microsoft Account":
+            profile_email = _get_user_profile_email(token_info["access_token"])
+            if profile_email != "Microsoft Account":
+                user_email = profile_email
 
         # URL encode the email to avoid issues with special characters
         encoded_email = quote(user_email)
@@ -267,6 +312,23 @@ async def auth_callback_get(
         return RedirectResponse(url=f"/?error=outlook_auth_failed&message={str(e)}")
 
 
+def _validate_auth_code(auth_code: str) -> None:
+    """
+    Validate the authorization code.
+
+    Args:
+        auth_code: The authorization code to validate
+
+    Raises:
+        HTTPException: If the authorization code is missing
+    """
+    if not auth_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authorization code is required",
+        )
+
+
 @router.post("/auth-callback", response_model=OAuthCredentialsResponse)
 async def auth_callback(
     auth_code_request: AuthCodeRequest,
@@ -285,11 +347,7 @@ async def auth_callback(
     try:
         auth_code = auth_code_request.code
 
-        if not auth_code:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Authorization code is required",
-            )
+        _validate_auth_code(auth_code)
 
         logger.info(f"Received authorization code: {auth_code[:10]}...")
 
