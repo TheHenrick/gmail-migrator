@@ -4,6 +4,10 @@
 
 console.log('main.js loaded');
 
+// Global state variables
+let isGmailConnected = false;
+let isDestinationConnected = false;
+
 // Make connectToGmail function globally available
 window.connectToGmail = async function() {
     console.log('Global connectToGmail function called');
@@ -310,6 +314,13 @@ function disconnectGmail() {
 
     // Update state
     isGmailConnected = false;
+    updateStartButtonTooltip();
+
+    // Disable the start migration button
+    const startMigrationBtn = document.getElementById('startMigration');
+    if (startMigrationBtn) {
+        startMigrationBtn.disabled = true;
+    }
 }
 
 // Function to get Gmail OAuth URL
@@ -360,35 +371,24 @@ function showDestinationOptions() {
 function initializeApp() {
     console.log('Initializing application...');
 
-    // Disable destination buttons by default
-    const outlookAuthBtn = document.getElementById('outlookAuthBtn');
-    const yahooAuthBtn = document.getElementById('yahooAuthBtn');
-
-    if (outlookAuthBtn) outlookAuthBtn.disabled = true;
-    if (yahooAuthBtn) yahooAuthBtn.disabled = true;
-
-    // Check if we have a Gmail token
+    // Check if Gmail token exists in localStorage
     const gmailToken = localStorage.getItem('gmailToken');
     if (gmailToken) {
-        // Enable destination buttons
-        if (outlookAuthBtn) outlookAuthBtn.disabled = false;
-        if (yahooAuthBtn) yahooAuthBtn.disabled = false;
+        // User is already authenticated, update UI
+        updateUIAfterGmailConnection(true);
+    } else {
+        // User is not authenticated, show connect button
+        updateUIAfterGmailConnection(false);
     }
 
-    // Initialize Gmail auth button
-    updateGmailAuthButton();
+    // Disable destination buttons by default
+    const destinationButtons = document.querySelectorAll('.destination-option');
+    destinationButtons.forEach(button => {
+        button.disabled = true;
+    });
 
     // Initialize destination selection
     initializeDestinationSelection();
-
-    // Initialize modals
-    initializeModals();
-
-    // Handle OAuth callback if present
-    handleOAuthCallback();
-
-    // Initialize migration options
-    initializeMigrationOptions();
 
     // Initialize advanced options toggle
     initializeAdvancedOptionsToggle();
@@ -396,10 +396,13 @@ function initializeApp() {
     // Initialize batch size slider
     initializeBatchSizeSlider();
 
-    // Load OAuth settings from local storage
-    loadOAuthSettings();
+    // Initialize migration options
+    initializeMigrationOptions();
 
-    // Add animation classes to elements
+    // Check for OAuth callback
+    handleOAuthCallback();
+
+    // Animate UI elements
     animateUIElements();
 }
 
@@ -526,339 +529,37 @@ function initializeMigrationOptions() {
     });
 }
 
-// Document ready event
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOMContentLoaded event fired');
-
-    // Direct debug check of localStorage
-    console.log('DIRECT CHECK - Gmail Token:', localStorage.getItem('gmailToken'));
-    console.log('DIRECT CHECK - User Info:', localStorage.getItem('gmailUserInfo'));
-
-    // Periodic checks of localStorage and UI state
-    setInterval(() => {
-        console.log('PERIODIC CHECK - Gmail Token:', localStorage.getItem('gmailToken'));
-        console.log('PERIODIC CHECK - User Info:', localStorage.getItem('gmailUserInfo'));
-
-        // Check if button is updated
-        const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-        if (directGmailAuthBtn) {
-            console.log('Button HTML:', directGmailAuthBtn.innerHTML.includes('user-info'));
-        }
-    }, 2000); // Check every 2 seconds
-
-    // Get DOM elements
-    connectGmailBtn = document.getElementById('connectGmail');
-    connectDestinationBtn = document.getElementById('connectDestination');
-    migrationForm = document.getElementById('migrationForm');
-    startMigrationBtn = document.getElementById('startMigration');
-    progressContainer = document.getElementById('progressContainer');
-    progressBar = document.getElementById('progressBar');
-    progressText = document.getElementById('progressText');
-    logContainer = document.getElementById('logContainer');
-
-    // Log element presence
-    console.log('connectGmailBtn found:', !!connectGmailBtn);
-
-    // Setup click handlers
-    if (connectGmailBtn) {
-        connectGmailBtn.addEventListener('click', function(event) {
-            // Prevent default action to ensure we control the flow
-            event.preventDefault();
-
-            // Check authentication first
-            const gmailToken = localStorage.getItem('gmailToken');
-            if (gmailToken) {
-                console.log('User is authenticated, showing disconnect prompt');
-                if (confirm('Do you want to disconnect from Gmail?')) {
-                    disconnectGmail();
-                } else {
-                    console.log('User cancelled disconnect action');
-                }
-            } else {
-                console.log('User is not authenticated, initiating OAuth flow');
-                connectToGmail();
-            }
-        });
-        console.log('Added smart click listener to connectGmailBtn');
-    }
-
-    // Add direct Gmail auth button click handler with debouncing
-    const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-    console.log('directGmailAuthBtn found:', !!directGmailAuthBtn);
-
-    if (directGmailAuthBtn) {
-        // Remove any existing click listeners to prevent duplicates
-        directGmailAuthBtn.replaceWith(directGmailAuthBtn.cloneNode(true));
-
-        // Get the fresh copy after replacement
-        const freshAuthBtn = document.getElementById('directGmailAuthBtn');
-
-        // Set a single click listener
-        freshAuthBtn.addEventListener('click', function handleAuthButtonClick(event) {
-            // Prevent default action
-            event.preventDefault();
-
-            console.log('Gmail Auth button clicked');
-
-            // Detailed check for authentication
-            const gmailToken = localStorage.getItem('gmailToken');
-            console.log('Token check on click:', gmailToken ? 'FOUND' : 'NOT FOUND');
-
-            if (gmailToken) {
-                console.log('USER IS AUTHENTICATED - showing disconnect prompt');
-                if (confirm('Do you want to disconnect from Gmail?')) {
-                    console.log('User confirmed disconnect, proceeding with disconnection');
-                    disconnectGmail();
-                } else {
-                    console.log('User CANCELLED disconnect action - doing nothing');
-                }
-            } else {
-                console.log('USER IS NOT AUTHENTICATED - proceeding with OAuth flow');
-                connectToGmail();
-            }
-        });
-
-        console.log('Added exclusive click handler to Gmail Auth button');
-    } else {
-        console.error('directGmailAuthBtn not found in DOM');
-    }
-
-    if (connectDestinationBtn) {
-        connectDestinationBtn.addEventListener('click', showDestinationOptions);
-    }
-
-    if (startMigrationBtn) {
-        startMigrationBtn.addEventListener('click', startMigration);
-    }
-
-    // Initialize modals if present
-    const modals = document.querySelectorAll('.modal');
-    if (modals.length > 0) {
-        initializeModals();
-    }
-
-    // Initialize application state
+// Initialize the application when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM fully loaded, initializing application...');
     initializeApp();
 
-    // Check for OAuth callback parameters
-    handleOAuthCallback();
+    // Ensure tooltip is created after a short delay to allow other elements to initialize
+    setTimeout(function() {
+        createMD3Tooltip();
+        console.log('Tooltip initialization completed');
+    }, 500);
 
-    // Force UI update for testing
-    console.log('Forcing UI update based on authentication');
-    updateUIBasedOnAuthentication();
+    // Add window resize event listener to reposition tooltip if visible
+    window.addEventListener('resize', function() {
+        const tooltip = document.getElementById('startMigrationTooltip');
+        const startMigrationBtn = document.getElementById('startMigration');
 
-    // OAuth Settings Modal
-    const oauthSettingsBtn = document.getElementById('oauthSettingsBtn');
-    const oauthSettingsModal = document.getElementById('oauthSettingsModal');
-    const closeModalBtn = document.querySelector('.close-modal');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-    const oauthForms = {
-        gmail: document.getElementById('gmailOAuthForm'),
-        outlook: document.getElementById('outlookOAuthForm'),
-        yahoo: document.getElementById('yahooOAuthForm')
-    };
+        if (tooltip && startMigrationBtn && tooltip.classList.contains('visible')) {
+            // Reposition tooltip
+            const buttonRect = startMigrationBtn.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
 
-    // Open OAuth settings modal
-    oauthSettingsBtn.addEventListener('click', () => {
-        oauthSettingsModal.style.display = 'block';
-        // Load saved OAuth settings
-        loadOAuthSettings();
-    });
+            const top = buttonRect.top + window.scrollY - tooltipRect.height - 12;
+            const left = buttonRect.left + window.scrollX + (buttonRect.width / 2);
 
-    // Close OAuth settings modal
-    closeModalBtn.addEventListener('click', () => {
-        oauthSettingsModal.style.display = 'none';
-    });
+            tooltip.style.top = `${top}px`;
+            tooltip.style.left = `${left}px`;
 
-    // Close modal if clicked outside
-    window.addEventListener('click', (event) => {
-        if (event.target === oauthSettingsModal) {
-            oauthSettingsModal.style.display = 'none';
+            console.log('Repositioned tooltip after window resize');
         }
     });
-
-    // Tab switching
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            // Remove active class from all buttons and contents
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
-
-            // Add active class to current button and content
-            button.classList.add('active');
-            const tabName = button.getAttribute('data-tab');
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-        });
-    });
-
-    // Save OAuth settings
-    Object.keys(oauthForms).forEach(provider => {
-        oauthForms[provider].addEventListener('submit', (e) => {
-            e.preventDefault();
-
-            const formData = new FormData(oauthForms[provider]);
-            const settings = {
-                clientId: formData.get('clientId'),
-                clientSecret: formData.get('clientSecret'),
-                redirectUri: formData.get('redirectUri')
-            };
-
-            // Save to localStorage (encrypted in a real app)
-            localStorage.setItem(`${provider}OAuthConfig`, JSON.stringify(settings));
-
-            logToConsole(`${provider.charAt(0).toUpperCase() + provider.slice(1)} OAuth settings saved`, 'success');
-        });
-    });
-
-    // Load OAuth settings from storage
-    function loadOAuthSettings() {
-        Object.keys(oauthForms).forEach(provider => {
-            const savedSettings = localStorage.getItem(`${provider}OAuthConfig`);
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-
-                // Fill in the form
-                document.getElementById(`${provider}ClientId`).value = settings.clientId || '';
-                document.getElementById(`${provider}ClientSecret`).value = settings.clientSecret || '';
-                document.getElementById(`${provider}RedirectUri`).value = settings.redirectUri || '';
-            }
-        });
-    }
-
-    // Function to update the destination connection UI
-    function updateDestinationConnectionUI(connected) {
-        const connectDestinationBtn = document.getElementById('connectDestination');
-
-        if (connected) {
-            isDestinationConnected = true;
-
-            if (connectDestinationBtn) {
-                connectDestinationBtn.textContent = 'Destination Connected';
-                connectDestinationBtn.classList.add('connected');
-                connectDestinationBtn.disabled = true;
-            }
-
-            // Enable start migration button if both source and destination are connected
-            if (isGmailConnected && startMigrationBtn) {
-            startMigrationBtn.disabled = false;
-            }
-        }
-    }
-
-    // Function to initialize migration
-    function initializeMigration() {
-        // Reset migration state
-        migration.isRunning = false;
-        migration.processed = 0;
-        migration.total = 0;
-        migration.logs = [];
-
-        // Clear UI elements
-        const migrationLog = document.getElementById('migrationLog');
-        if (migrationLog) {
-            migrationLog.innerHTML = '';
-        }
-    }
-
-    // Advanced Options Toggle
-    const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
-    const advancedOptions = document.getElementById('advancedOptions');
-    if (advancedOptionsToggle && advancedOptions) {
-        const chevron = advancedOptionsToggle.querySelector('.chevron');
-
-        advancedOptionsToggle.addEventListener('click', function() {
-            advancedOptions.classList.toggle('open');
-            chevron.classList.toggle('open');
-        });
-    }
-
-    // Handle destination provider selection
-    initializeDestinationSelection();
-
-    // Make connectToOutlook and connectToYahoo available globally
-    window.connectToOutlook = connectToOutlook;
-    window.connectToYahoo = connectToYahoo;
 });
-
-// Function to initialize modal dialogs
-function initializeModals() {
-    console.log('Initializing modals');
-    const modals = document.querySelectorAll('.modal');
-    const closeBtns = document.querySelectorAll('.close-modal');
-
-    // Set up close buttons
-    closeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const modal = btn.closest('.modal');
-            if (modal) {
-                modal.style.display = 'none';
-            }
-        });
-    });
-
-    // Close modal when clicking outside
-    window.addEventListener('click', (event) => {
-        modals.forEach(modal => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-    });
-
-    console.log('Modal initialization complete');
-}
-
-// Check for existing tokens and update UI accordingly
-function updateUIBasedOnAuthentication() {
-    console.log('Running updateUIBasedOnAuthentication');
-
-    // Check if user is already authenticated with Gmail
-    const gmailToken = localStorage.getItem('gmailToken');
-    console.log('Gmail token exists:', !!gmailToken);
-
-    if (gmailToken) {
-        console.log('Found Gmail token, updating UI elements');
-        logToConsole('Found existing Gmail token, updating UI', 'info');
-        isGmailConnected = true;
-
-        // Update Gmail connection button if it exists
-        const connectGmailBtn = document.getElementById('connectGmail');
-        console.log('connectGmailBtn exists:', !!connectGmailBtn);
-
-        if (connectGmailBtn) {
-            connectGmailBtn.textContent = 'Connected to Gmail';
-            connectGmailBtn.classList.remove('primary');
-            connectGmailBtn.classList.add('secondary');
-            connectGmailBtn.classList.add('connected');
-        }
-
-        // Check for direct Gmail auth button
-        const directGmailAuthBtn = document.getElementById('directGmailAuthBtn');
-        console.log('directGmailAuthBtn exists:', !!directGmailAuthBtn);
-
-        // Update the direct Gmail auth button
-        if (directGmailAuthBtn) {
-            console.log('Calling updateGmailAuthButton to update button appearance');
-            updateGmailAuthButton();
-        } else {
-            console.error('directGmailAuthBtn not found while trying to update UI');
-        }
-
-        // Enable the destination connection button
-        const connectDestinationBtn = document.getElementById('connectDestination');
-        if (connectDestinationBtn) {
-            connectDestinationBtn.disabled = false;
-        }
-
-        logToConsole('UI updated to reflect Gmail authentication', 'success');
-    } else {
-        console.log('No Gmail token found, user is not authenticated');
-    }
-
-    // Check for destination authentication (similar logic)
-    // This would be implemented based on your destination providers
-}
 
 // Function to handle OAuth callback parameters from URL
 function handleOAuthCallback() {
@@ -978,4 +679,208 @@ function initializeDestinationSelection() {
             }
         }, 1500);
     };
+}
+
+function updateStartButtonTooltip() {
+    const startMigrationBtn = document.getElementById('startMigration');
+    if (!startMigrationBtn) return;
+
+    let tooltipText = '';
+
+    if (!isGmailConnected && !isDestinationConnected) {
+        tooltipText = 'Connect both accounts to begin';
+    } else if (!isGmailConnected) {
+        tooltipText = 'Connect a Gmail account to continue';
+    } else if (!isDestinationConnected) {
+        tooltipText = 'Connect a destination account to continue';
+    } else {
+        // Both are connected, show a ready message
+        tooltipText = 'Ready to migrate your emails';
+    }
+
+    // Set the data-tooltip attribute
+    startMigrationBtn.setAttribute('data-tooltip', tooltipText);
+
+    // Update the MD3 tooltip text
+    updateMD3TooltipText();
+
+    // Log the tooltip update
+    console.log('Updated start button tooltip:', tooltipText);
+}
+
+/**
+ * Creates the tooltip element for the start migration button styled with Apple HIG
+ */
+function createMD3Tooltip() {
+    const startMigrationBtn = document.getElementById('startMigration');
+    if (!startMigrationBtn) {
+        console.error('Start migration button not found');
+        return;
+    }
+
+    console.log('Creating Apple HIG tooltip for start migration button');
+
+    // Remove any existing tooltip
+    const existingTooltip = document.getElementById('startMigrationTooltip');
+    if (existingTooltip) {
+        existingTooltip.remove();
+    }
+
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.className = 'md3-tooltip';
+    tooltip.id = 'startMigrationTooltip';
+
+    // Get tooltip text from button
+    const tooltipText = startMigrationBtn.getAttribute('data-tooltip') || 'Connect accounts to start migration';
+    tooltip.textContent = tooltipText;
+
+    // Append tooltip to the document body
+    document.body.appendChild(tooltip);
+
+    // Track if mouse is over the button
+    let isMouseOverButton = false;
+
+    // Add event listeners for tooltip - Apple HIG style interactions
+    startMigrationBtn.addEventListener('mouseenter', function(event) {
+        isMouseOverButton = true;
+        // Apple typically shows tooltips after a very short delay
+        setTimeout(() => {
+            if (isMouseOverButton) {
+                showMD3Tooltip(event);
+            }
+        }, 50);
+    });
+
+    startMigrationBtn.addEventListener('mouseleave', function() {
+        isMouseOverButton = false;
+        hideMD3Tooltip();
+    });
+
+    startMigrationBtn.addEventListener('focus', function(event) {
+        // Show tooltip immediately on focus (accessibility)
+        showMD3Tooltip(event);
+    });
+
+    startMigrationBtn.addEventListener('blur', hideMD3Tooltip);
+
+    // Add event listener to keep tooltip visible when mouse moves over the button
+    startMigrationBtn.addEventListener('mousemove', function(event) {
+        if (isMouseOverButton) {
+            // Ensure tooltip is visible
+            const tooltip = document.getElementById('startMigrationTooltip');
+            if (tooltip && !tooltip.classList.contains('visible')) {
+                showMD3Tooltip(event);
+            }
+        }
+    });
+
+    // Log that tooltip was created
+    console.log('Apple HIG tooltip created with text:', tooltipText);
+
+    // Initially position the tooltip but keep it hidden
+    // This helps with initial positioning calculations
+    tooltip.style.visibility = 'hidden';
+    tooltip.style.opacity = '0';
+
+    const buttonRect = startMigrationBtn.getBoundingClientRect();
+    tooltip.style.position = 'absolute';
+    tooltip.style.top = `${buttonRect.top - 40}px`;
+    tooltip.style.left = `${buttonRect.left + (buttonRect.width / 2)}px`;
+    tooltip.style.transform = 'translateX(-50%)';
+}
+
+/**
+ * Shows the Material Design 3 tooltip styled with Apple HIG
+ */
+function showMD3Tooltip(event) {
+    const startMigrationBtn = document.getElementById('startMigration');
+    const tooltip = document.getElementById('startMigrationTooltip');
+
+    if (!startMigrationBtn || !tooltip) return;
+
+    // If tooltip is already visible, don't reposition it
+    if (tooltip.classList.contains('visible')) {
+        return;
+    }
+
+    // Update tooltip text
+    tooltip.textContent = startMigrationBtn.getAttribute('data-tooltip') || 'Connect accounts to start migration';
+
+    // First set tooltip to visible but with opacity 0 to calculate its dimensions
+    tooltip.style.visibility = 'visible';
+    tooltip.style.opacity = '0';
+
+    // Position the tooltip above the button
+    const buttonRect = startMigrationBtn.getBoundingClientRect();
+
+    // Wait for the browser to calculate the tooltip dimensions
+    setTimeout(() => {
+        const tooltipRect = tooltip.getBoundingClientRect();
+
+        // Calculate position - Apple HIG typically positions tooltips with more space
+        const top = buttonRect.top + window.scrollY - tooltipRect.height - 16;
+        const left = buttonRect.left + window.scrollX + (buttonRect.width / 2);
+
+        // Set position
+        tooltip.style.position = 'absolute';
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+        tooltip.style.transform = 'translateX(-50%)';
+
+        // Show the tooltip with animation
+        tooltip.classList.add('visible');
+
+        console.log('Showing Apple HIG tooltip with dimensions:',
+            tooltipRect.width, 'x', tooltipRect.height);
+    }, 10);
+}
+
+/**
+ * Hides the Material Design 3 tooltip styled with Apple HIG
+ */
+function hideMD3Tooltip() {
+    const tooltip = document.getElementById('startMigrationTooltip');
+    if (tooltip) {
+        // Apple HIG typically has a slight delay for dismissal
+        // to prevent accidental dismissals
+        setTimeout(() => {
+            // Check if the mouse is over the tooltip
+            const isMouseOverTooltip = false; // We're not allowing interaction with the tooltip
+
+            if (!isMouseOverTooltip) {
+                tooltip.classList.remove('visible');
+                console.log('Hiding Apple HIG tooltip');
+            }
+        }, 100); // Slightly longer delay for Apple HIG
+    }
+}
+
+/**
+ * Updates the Apple HIG tooltip text based on the button's data-tooltip attribute
+ */
+function updateMD3TooltipText() {
+    const startMigrationBtn = document.getElementById('startMigration');
+    const tooltip = document.getElementById('startMigrationTooltip');
+
+    if (startMigrationBtn && tooltip) {
+        const tooltipText = startMigrationBtn.getAttribute('data-tooltip') || 'Connect accounts to start migration';
+
+        // Only update if text has changed
+        if (tooltip.textContent !== tooltipText) {
+            tooltip.textContent = tooltipText;
+            console.log('Updated Apple HIG tooltip text:', tooltipText);
+
+            // If tooltip is currently visible, reposition it for the new text
+            if (tooltip.classList.contains('visible')) {
+                // Hide tooltip temporarily
+                tooltip.classList.remove('visible');
+
+                // Show tooltip again after a short delay to allow for repositioning
+                setTimeout(() => {
+                    showMD3Tooltip();
+                }, 50);
+            }
+        }
+    }
 }
