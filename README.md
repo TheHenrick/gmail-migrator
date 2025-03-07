@@ -26,6 +26,9 @@ A tool to help users migrate their Gmail emails to other email service providers
   - Batch migration of multiple emails
   - Transfer emails with attachments
   - Create folders in Outlook for organizing migrated emails
+  - Migrate Gmail labels to Outlook folders
+  - Migrate emails by label to corresponding folders
+  - Full migration of all emails preserving label structure
 
 - **User Interface**
   - Basic web interface following Apple HIG principles
@@ -35,6 +38,10 @@ A tool to help users migrate their Gmail emails to other email service providers
   - Gmail authentication and email retrieval
   - Outlook authentication, folder management, and email migration
   - Health check endpoint
+  - Migration endpoints for Gmail to Outlook transfers:
+    - `/migration/gmail-to-outlook/labels`: Migrate Gmail labels to Outlook folders
+    - `/migration/gmail-to-outlook/by-label`: Migrate emails from a specific Gmail label
+    - `/migration/gmail-to-outlook/all`: Migrate all emails preserving label structure
 
 ### Planned Features
 
@@ -351,3 +358,40 @@ To set up signed commits:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Docker
+
+### Building the Docker Image
+
+You can build the Docker image using the following command:
+
+```bash
+docker compose build
+```
+
+This will create a Docker image with the tag `gmail-migrator-app:latest`.
+
+### Running the Docker Container
+
+You can run the Docker container using the following command:
+
+```bash
+docker compose up -d
+```
+
+This will start the container in detached mode. You can access the application at http://localhost:8000.
+
+### Production Deployment
+
+For production deployment, you can use the production Docker Compose file:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+This will use the pre-built image with the tag `gmail-migrator:v0.2.0` and set the appropriate production settings.
+
+### Docker Image Tags
+
+- `gmail-migrator-app:latest`: Latest development build
+- `gmail-migrator:v0.2.0`: Stable release with email migration feature
