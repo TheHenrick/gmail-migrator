@@ -80,8 +80,8 @@ class OutlookAuthManager:
         try:
             self.app = msal.ConfidentialClientApplication(
                 client_id=self.config.client_id,
-                client_secret=self.config.client_secret,
                 authority=self.config.authority,
+                client_credential=self.config.client_secret,
                 token_cache=self.cache,
             )
             logger.info("MSAL ConfidentialClientApplication initialized successfully")
