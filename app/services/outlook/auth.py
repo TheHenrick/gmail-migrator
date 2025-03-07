@@ -1,7 +1,7 @@
-"""Outlook authentication module."""
+"""Authentication manager for Outlook API."""
 
 import logging
-from pathlib import Path
+import os
 from typing import Any
 
 import msal
@@ -12,142 +12,158 @@ from app.config import settings
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Microsoft Graph API scopes
-# These scopes allow reading and writing mail and accessing user profile
+# Define the token cache file path
+TOKEN_CACHE_FILE = ".outlook_token_cache.json"
+
+# Define the scopes for the Microsoft Graph API
 SCOPES = [
     "https://graph.microsoft.com/Mail.Read",
     "https://graph.microsoft.com/Mail.ReadWrite",
     "https://graph.microsoft.com/Mail.Send",
-    "https://graph.microsoft.com/User.Read",  # Add User.Read permission
+    "https://graph.microsoft.com/User.Read",
+    "offline_access",
 ]
-
-# Cache file for MSAL token cache
-CACHE_FILE = ".outlook_token_cache.json"
-CACHE_PATH = Path(CACHE_FILE)
 
 
 def _raise_token_error(result: dict[str, Any], operation: str) -> None:
     """
-    Raise an HTTP exception for token errors.
+    Raise an HTTPException for token errors.
 
     Args:
-        result: Token operation result
-        operation: Operation description (acquire/refresh)
+        result: The result from the token operation
+        operation: The operation being performed (acquire, refresh)
 
     Raises:
-        HTTPException: With appropriate error details
+        HTTPException: With details about the token error
     """
-    error_desc = result.get("error_description", "Unknown error")
-    logger.error(f"Error {operation} token: {result}")
+    error = result.get("error", "unknown_error")
+    error_description = result.get("error_description", "No description available")
+
+    logger.error(f"Token {operation} error: {error} - {error_description}")
+
     raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Failed to {operation} token: {error_desc}",
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=f"Token {operation} failed: {error} - {error_description}",
     )
 
 
 class OutlookAuthManager:
-    """Manager for Outlook/Microsoft Graph API OAuth2 authentication."""
+    """Authentication manager for Outlook API."""
 
     def __init__(
         self,
-        client_id: str | None = None,
-        client_secret: str | None = None,
-        redirect_uri: str | None = None,
-        scopes: list[str] | None = None,
+        client_id: str = settings.OUTLOOK_CLIENT_ID,
+        client_secret: str = settings.OUTLOOK_CLIENT_SECRET,
+        redirect_uri: str = settings.OUTLOOK_REDIRECT_URI,
+        authority: str = "https://login.microsoftonline.com/common",
+        scopes: list[str] = None,
     ) -> None:
         """
         Initialize the Outlook authentication manager.
 
         Args:
-            client_id: Microsoft app client ID
-            client_secret: Microsoft app client secret
-            redirect_uri: Redirect URI for OAuth2 flow
-            scopes: OAuth2 scopes to request
+            client_id: The client ID for the Outlook application
+            client_secret: The client secret for the Outlook application
+            redirect_uri: The redirect URI for the Outlook application
+            authority: The authority URL for the Outlook application
+            scopes: The scopes for the Outlook application
         """
-        self.client_id = client_id or settings.OUTLOOK_CLIENT_ID
-        self.client_secret = client_secret or settings.OUTLOOK_CLIENT_SECRET
-        self.redirect_uri = redirect_uri or settings.OUTLOOK_REDIRECT_URI
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.redirect_uri = redirect_uri
+        self.authority = authority
         self.scopes = scopes or SCOPES
-
-        logger.info(f"Initializing OutlookAuthManager with client_id: {self.client_id}")
-        logger.info(f"Redirect URI: {self.redirect_uri}")
-        logger.info(f"Scopes: {self.scopes}")
-
+        self.cache = self._load_cache()
+        
         try:
             self.app = msal.ConfidentialClientApplication(
-                self.client_id,
-                authority="https://login.microsoftonline.com/common",
-                client_credential=self.client_secret,
-                token_cache=self._load_cache(),
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                authority=self.authority,
+                token_cache=self.cache,
             )
             logger.info("MSAL ConfidentialClientApplication initialized successfully")
-        except Exception as e:
-            logger.exception(f"Error initializing MSAL application: {str(e)}")
+        except Exception:
+            logger.exception("Error initializing MSAL application")
             raise
 
     def _load_cache(self) -> msal.SerializableTokenCache:
         """
-        Load token cache from file if it exists.
+        Load the token cache from file.
 
         Returns:
-            msal.SerializableTokenCache: Token cache
+            SerializableTokenCache: The token cache
         """
         cache = msal.SerializableTokenCache()
-        if CACHE_PATH.exists():
-            with CACHE_PATH.open() as cache_file:
-                cache.deserialize(cache_file.read())
+        
+        if os.path.exists(TOKEN_CACHE_FILE):
+            try:
+                with open(TOKEN_CACHE_FILE) as cache_file:
+                    cache.deserialize(cache_file.read())
+                logger.info(f"Loaded token cache from {TOKEN_CACHE_FILE}")
+            except Exception:
+                logger.exception(f"Failed to load token cache from {TOKEN_CACHE_FILE}")
+        else:
+            logger.info("Token cache file not found, creating new cache")
+        
         return cache
 
     def _save_cache(self) -> None:
-        """Save token cache to file."""
-        if self.app.token_cache.has_state_changed:
-            with CACHE_PATH.open("w") as cache_file:
-                cache_file.write(self.app.token_cache.serialize())
+        """Save the token cache to file."""
+        if self.cache.has_state_changed:
+            try:
+                with open(TOKEN_CACHE_FILE, "w") as cache_file:
+                    cache_file.write(self.cache.serialize())
+                logger.info(f"Saved token cache to {TOKEN_CACHE_FILE}")
+            except Exception:
+                logger.exception(f"Failed to save token cache to {TOKEN_CACHE_FILE}")
 
-    def get_auth_url(self) -> str:
+    def get_authorization_url(self) -> str:
         """
-        Generate an authorization URL for the OAuth2 flow.
+        Generate the authorization URL for OAuth flow.
 
         Returns:
-            str: Authorization URL
+            str: The authorization URL
+
+        Raises:
+            HTTPException: If authorization URL generation fails
         """
         try:
-            logger.info(f"Generating authorization URL with scopes: {self.scopes}")
-            logger.info(f"Using redirect URI: {self.redirect_uri}")
-            logger.info(f"Using client ID: {self.client_id}")
-
-            # The MSAL library will automatically add the reserved scopes
             auth_url = self.app.get_authorization_request_url(
                 self.scopes,
                 redirect_uri=self.redirect_uri,
                 prompt="select_account",
             )
-
+            
             logger.info(f"Generated authorization URL: {auth_url}")
             return auth_url
         except Exception as e:
-            logger.exception(f"Error generating authorization URL: {str(e)}")
-
+            logger.exception("Error generating authorization URL")
+            
             # If the error is related to reserved scopes, try with a mock URL for testing
             if "reserved" in str(e):
                 logger.warning("Using mock URL due to scope error")
-                mock_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={self.client_id}&response_type=code&redirect_uri={self.redirect_uri}&scope={'+'.join(self.scopes)}"
-                return mock_url
-
+                return (
+                    f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                    f"?client_id={self.client_id}&response_type=code"
+                    f"&redirect_uri={self.redirect_uri}"
+                    f"&scope={'+'.join(self.scopes)}"
+                )
+                
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate authorization URL: {str(e)}",
-            )
+            ) from e
 
     def get_token_from_code(self, code: str) -> dict[str, Any]:
         """
         Exchange authorization code for access token.
 
         Args:
-            code: Authorization code from OAuth callback
+            code: The authorization code from OAuth callback
 
         Returns:
-            Dict[str, Any]: Token information
+            Dict[str, Any]: The token information
 
         Raises:
             HTTPException: If token acquisition fails
@@ -194,9 +210,9 @@ class OutlookAuthManager:
             logger.info(f"Exchanging authorization code for token: {code[:10]}...")
             logger.info(f"Using client ID: {self.client_id}")
             logger.info(f"Using redirect URI: {self.redirect_uri}")
-
+            
             token_info = self.get_token_from_code(code)
-
+            
             # Format the response to match the expected structure
             return {
                 "access_token": token_info.get("access_token", ""),
@@ -205,27 +221,38 @@ class OutlookAuthManager:
                 "token_type": token_info.get("token_type", "Bearer"),
                 "scope": " ".join(token_info.get("scope", [])),
             }
-        except Exception as e:
-            logger.exception(f"Error exchanging code for token: {str(e)}")
+        except Exception:
+            logger.exception("Error exchanging code for token")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to acquire token: {str(e)}",
-            )
+                detail="Failed to acquire token",
+            ) from None
 
     def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """
         Refresh an access token using a refresh token.
 
         Args:
-            refresh_token: Refresh token to use
+            refresh_token: The refresh token
 
         Returns:
-            Dict[str, Any]: New token information
+            Dict[str, Any]: The new token information
 
         Raises:
             HTTPException: If token refresh fails
         """
         try:
+            # First try to get token silently from cache
+            accounts = self.app.get_accounts()
+            if accounts:
+                logger.info(f"Found {len(accounts)} accounts in cache")
+                result = self.app.acquire_token_silent(self.scopes, account=accounts[0])
+                if result:
+                    logger.info("Got token silently from cache")
+                    return result
+
+            # If not in cache, use the refresh token
+            logger.info("Getting token with refresh token")
             result = self.app.acquire_token_by_refresh_token(
                 refresh_token, scopes=self.scopes
             )
@@ -243,5 +270,5 @@ class OutlookAuthManager:
             ) from e
 
 
-# Create a singleton instance
+# Create a global instance of the auth manager
 oauth_flow = OutlookAuthManager()

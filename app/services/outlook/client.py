@@ -3,16 +3,17 @@
 import base64
 import logging
 import mimetypes
-from typing import Any
+from typing import Any, Dict, List, Optional
+import json
 
-import requests
-from fastapi import HTTPException
+import httpx
+from fastapi import HTTPException, status
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 # Microsoft Graph API base URL
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
 class OutlookClient:
@@ -30,48 +31,107 @@ class OutlookClient:
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
+        logger.info("Initialized OutlookClient")
 
     def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: dict[str, Any] | None = None,
-        request_data: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        self, method: str, endpoint: str, data: dict = None, params: dict = None
+    ) -> dict:
         """
         Make a request to the Microsoft Graph API.
 
         Args:
-            method: HTTP method
-            endpoint: API endpoint
-            params: Query parameters
-            request_data: Request body and headers combined
+            method: The HTTP method to use
+            endpoint: The API endpoint to call
+            data: The data to send in the request body
+            params: The query parameters to include in the request
 
         Returns:
-            Dict[str, Any]: API response
+            dict: The response from the API
+
+        Raises:
+            HTTPException: If the request fails
         """
-        url = f"{GRAPH_API_BASE}{endpoint}"
-
-        # Extract headers from request_data if provided
-        headers = self.headers.copy()
-        data = None
-
-        if request_data:
-            if "headers" in request_data:
-                headers.update(request_data.pop("headers"))
-            data = request_data
-
+        url = f"{GRAPH_API_BASE_URL}{endpoint}"
+        
         try:
-            response = requests.request(
-                method, url, params=params, json=data, headers=headers, timeout=30
-            )
+            logger.info(f"Making {method} request to {url}")
+            
+            with httpx.Client(timeout=30.0) as client:
+                if method.upper() == "GET":
+                    response = client.get(url, headers=self.headers, params=params)
+                elif method.upper() == "POST":
+                    response = client.post(
+                        url, headers=self.headers, json=data, params=params
+                    )
+                elif method.upper() == "PUT":
+                    response = client.put(
+                        url, headers=self.headers, json=data, params=params
+                    )
+                elif method.upper() == "DELETE":
+                    response = client.delete(url, headers=self.headers, params=params)
+                else:
+                    error_msg = f"Unsupported HTTP method: {method}"
+                    raise ValueError(error_msg)
+
+            # Check if the request was successful
             response.raise_for_status()
-            return response.json() if response.content else {}
-        except requests.RequestException as e:
-            logger.exception(f"Error making request to {endpoint}")
+            
+            # Parse the response
+            if response.content:
+                return response.json()
+            return {}
+            
+        except httpx.HTTPStatusError as e:
+            logger.exception("HTTP error occurred")
+            
+            # Handle specific error codes
+            if e.response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed. Please sign in again.",
+                ) from e
+            
+            if e.response.status_code == 403:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to access this resource.",
+                ) from e
+            
+            if e.response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="The requested resource was not found.",
+                ) from e
+            
+            # Try to parse the error response
+            try:
+                error_data = e.response.json()
+                error_message = error_data.get("error", {}).get(
+                    "message", "Unknown error"
+                )
+                raise HTTPException(
+                    status_code=e.response.status_code,
+                    detail=f"Microsoft Graph API error: {error_message}",
+                ) from e
+            except json.JSONDecodeError:
+                # If we can't parse the error response, use the status code and text
+                raise HTTPException(
+                    status_code=e.response.status_code,
+                    detail=f"Microsoft Graph API error: {e.response.text}",
+                ) from e
+                    
+        except httpx.RequestError as e:
+            logger.exception("Request error occurred")
             raise HTTPException(
-                status_code=response.status_code if "response" in locals() else 500,
-                detail=str(e),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Error connecting to Microsoft Graph API: {str(e)}",
+            ) from e
+            
+        except Exception as e:
+            logger.exception("Unexpected error occurred")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Unexpected error: {str(e)}",
             ) from e
 
     def get_mailbox_info(self) -> dict[str, Any]:
@@ -398,50 +458,59 @@ class OutlookClient:
 
         return message
 
-    def get_user_profile(self) -> dict[str, Any]:
+    def get_user_profile(self) -> dict:
         """
         Get the user's profile information.
 
         Returns:
-            Dict[str, Any]: User profile information
-        """
-        logger.info("Fetching user profile from Microsoft Graph API")
-        try:
-            # First try to get the full profile
-            response = self._make_request("GET", "/me")
-            logger.info(f"User profile response: {response}")
+            dict: The user's profile information
 
-            # Log specific fields we're interested in
+        Raises:
+            HTTPException: If the request fails
+        """
+        try:
+            logger.info("Getting user profile")
+            response = self._make_request(
+                "GET", 
+                "/me?$select=displayName,mail,userPrincipalName,id,otherMails"
+            )
+            
+            # Log the fields that might contain email addresses
             email_fields = []
-            if "mail" in response:
+            if 'mail' in response:
                 email_fields.append(f"mail: {response.get('mail')}")
-            if "userPrincipalName" in response:
+            if 'userPrincipalName' in response:
                 email_fields.append(
                     f"userPrincipalName: {response.get('userPrincipalName')}"
                 )
-            if "otherMails" in response and response["otherMails"]:
+            if 'otherMails' in response and response['otherMails']:
                 email_fields.append(f"otherMails: {response.get('otherMails')}")
-
-            logger.info(f"Email fields found: {', '.join(email_fields)}")
-
+                
+            if email_fields:
+                logger.info(f"Found email fields: {', '.join(email_fields)}")
+            else:
+                logger.warning("No email fields found in user profile")
+                
             return response
-        except Exception as e:
-            logger.error(f"Error fetching user profile: {str(e)}")
+        except Exception:
+            logger.exception("Error fetching user profile")
 
             # If full profile fails, try to get just the email
             try:
                 logger.info("Trying to get just the email")
                 email_response = self._make_request(
-                    "GET", "/me?$select=mail,userPrincipalName,id,displayName"
+                    "GET", 
+                    "/me?$select=mail,userPrincipalName,id,displayName"
                 )
                 logger.info(f"Email response: {email_response}")
                 return email_response
-            except Exception as email_error:
-                logger.error(f"Error fetching email: {str(email_error)}")
+            except Exception:
+                logger.exception("Error fetching email")
 
                 # If all else fails, return a minimal profile with default values
                 return {
-                    "displayName": "Microsoft User",
-                    "userPrincipalName": "Microsoft Account",
                     "id": "unknown",
+                    "displayName": "Microsoft User",
+                    "mail": None,
+                    "userPrincipalName": None,
                 }

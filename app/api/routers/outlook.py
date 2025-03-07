@@ -1,18 +1,22 @@
 """Router for Outlook-related API endpoints."""
 
+import base64
+import json
 import logging
 from typing import Annotated, Any
+from urllib.parse import quote
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.config import settings
 from app.dependencies import get_gmail_client, get_outlook_client
 from app.services.gmail.client import GmailClient
 from app.services.outlook.auth import OutlookAuthManager
 from app.services.outlook.auth import oauth_flow as outlook_oauth_flow
 from app.services.outlook.client import OutlookClient
+from app.config import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -100,32 +104,32 @@ class AuthCodeRequest(BaseModel):
 async def get_auth_url(
     config: OAuthConfig | None = None,
 ) -> dict[str, str]:
-    """Get the OAuth authentication URL for Outlook."""
-    try:
-        logger.info("Generating Outlook OAuth URL")
-        logger.info(f"Config provided: {config is not None}")
+    """
+    Get the authorization URL for Outlook OAuth.
 
+    Args:
+        config: Optional OAuth configuration
+
+    Returns:
+        Dict with auth_url key
+    """
+    try:
         # Get the OAuth flow instance
         flow_instance = outlook_oauth_flow
         if config:
-            logger.info("Using custom OAuth config")
             flow_instance = OutlookAuthManager(
                 client_id=config.client_id,
                 client_secret=config.client_secret,
                 redirect_uri=config.redirect_uri,
             )
-        else:
-            logger.info("Using default OAuth config")
-            logger.info(f"Client ID: {settings.OUTLOOK_CLIENT_ID}")
-            logger.info(f"Redirect URI: {settings.OUTLOOK_REDIRECT_URI}")
 
-        # Get the authorization URL - use the correct method name
-        auth_url = flow_instance.get_auth_url()
-        logger.info(f"Generated Outlook OAuth URL: {auth_url}")
+        # Generate the authorization URL
+        auth_url = flow_instance.get_authorization_url()
+        logger.info(f"Generated authorization URL: {auth_url[:50]}...")
 
         return {"auth_url": auth_url}
     except Exception as e:
-        logger.exception(f"Failed to get authentication URL: {str(e)}")
+        logger.exception("Failed to get authentication URL")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get authentication URL: {str(e)}",
@@ -137,8 +141,18 @@ async def auth_callback_get(
     code: str = Query(None, description="Authorization code"),
     error: str = Query(None, description="Error from OAuth provider"),
     config: OAuthConfig | None = None,
-):
-    """Handle the OAuth callback from Outlook with a GET request and redirect to the main page."""
+) -> RedirectResponse:
+    """
+    Handle the OAuth callback from Outlook with a GET request and redirect to the main page.
+
+    Args:
+        code: Authorization code from OAuth provider
+        error: Error message from OAuth provider
+        config: Optional OAuth configuration
+
+    Returns:
+        Redirect response to the main page
+    """
     try:
         logger.info("Processing Outlook OAuth callback (GET)")
 
@@ -168,10 +182,6 @@ async def auth_callback_get(
         logger.info(f"Received token info: {token_info.keys()}")
 
         # Try to decode the access token to get user information
-        import base64
-
-        import jwt
-
         user_email = "Microsoft Account"  # Default value
 
         # Try to decode the JWT token
@@ -202,8 +212,8 @@ async def auth_callback_get(
                 elif "unique_name" in token_data:
                     user_email = token_data["unique_name"]
                     logger.info(f"Found unique_name in token: {user_email}")
-        except Exception as e:
-            logger.warning(f"Could not decode token: {str(e)}")
+        except Exception:
+            logger.exception("Could not decode token")
 
         # Get user information from Microsoft Graph API
         try:
@@ -233,12 +243,10 @@ async def auth_callback_get(
                         break
 
             logger.info(f"Final user email: {user_email}")
-        except Exception as e:
-            logger.exception(f"Could not get user profile: {str(e)}")
+        except Exception:
+            logger.exception("Could not get user profile")
 
         # URL encode the email to avoid issues with special characters
-        from urllib.parse import quote
-
         encoded_email = quote(user_email)
         logger.info(f"Encoded email: {encoded_email}")
 
@@ -254,23 +262,28 @@ async def auth_callback_get(
         logger.info(f"Redirecting to: {redirect_url}")
         return RedirectResponse(url=redirect_url)
     except Exception as e:
-        logger.exception(f"Failed to exchange authorization code: {str(e)}")
+        logger.exception("Failed to exchange authorization code")
         # Redirect to main page with error parameter
         return RedirectResponse(url=f"/?error=outlook_auth_failed&message={str(e)}")
 
 
 @router.post("/auth-callback", response_model=OAuthCredentialsResponse)
-async def auth_callback_post(
-    request: AuthCodeRequest = None,
-    code: str = Query(None, description="Authorization code"),
+async def auth_callback(
+    auth_code_request: AuthCodeRequest,
     config: OAuthConfig | None = None,
-) -> OAuthCredentialsResponse:
-    """Handle the OAuth callback from Outlook with a POST request."""
-    try:
-        logger.info("Processing Outlook OAuth callback (POST)")
+) -> dict[str, Any]:
+    """
+    Exchange authorization code for access token.
 
-        # Get the authorization code from either the request body or query parameter
-        auth_code = request.code if request and request.code else code
+    Args:
+        auth_code_request: Authorization code request
+        config: Optional OAuth configuration
+
+    Returns:
+        OAuth credentials
+    """
+    try:
+        auth_code = auth_code_request.code
 
         if not auth_code:
             raise HTTPException(
@@ -292,7 +305,7 @@ async def auth_callback_post(
         # Exchange the authorization code for credentials
         return flow_instance.exchange_code(auth_code)
     except Exception as e:
-        logger.exception(f"Failed to exchange authorization code: {str(e)}")
+        logger.exception("Failed to exchange authorization code")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to exchange authorization code: {str(e)}",
