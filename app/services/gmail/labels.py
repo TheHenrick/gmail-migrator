@@ -41,6 +41,7 @@ class GmailLabelsService:
             List of label objects with id, name, and type
         """
         if self._all_labels_cache:
+            logger.info(f"Returning {len(self._all_labels_cache)} labels from cache")
             return self._all_labels_cache
 
         self._ensure_service()
@@ -49,26 +50,41 @@ class GmailLabelsService:
             return []
 
         try:
+            logger.info("Fetching labels from Gmail API")
             response = self.service.users().labels().list(userId="me").execute()
             labels = response.get("labels", [])
+            logger.info(f"Received {len(labels)} labels from Gmail API")
+
+            # Log the raw labels for debugging
+            for label in labels:
+                logger.info(
+                    f"Raw label: {label['id']} - {label.get('name', 'NO_NAME')} - "
+                    f"Type: {label.get('type', 'NO_TYPE')}"
+                )
 
             # Transform into a simpler format
             transformed_labels = []
             for label in labels:
+                # Ensure we correctly identify user labels
                 label_type = "system"
-                if label["type"] == "user":
-                    label_type = "custom"
+                if label.get("type") == "user":
+                    label_type = "user"
 
-                transformed_labels.append(
-                    {
-                        "id": label["id"],
-                        "name": label["name"],
-                        "type": label_type,
-                    }
+                # Create the transformed label
+                transformed_label = {
+                    "id": label["id"],
+                    "name": label["name"],
+                    "type": label_type,
+                }
+                transformed_labels.append(transformed_label)
+                logger.info(
+                    f"Transformed label: {transformed_label['id']} - "
+                    f"{transformed_label['name']} - Type: {transformed_label['type']}"
                 )
 
             # Cache results for future use
             self._all_labels_cache = transformed_labels
+            logger.info(f"Cached {len(transformed_labels)} labels")
 
             return transformed_labels
         except Exception:

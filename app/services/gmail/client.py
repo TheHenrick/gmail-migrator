@@ -2,11 +2,13 @@
 
 import base64
 import logging
+import os
 import time
 from collections.abc import Generator
 from typing import Any
 
 import google.oauth2.credentials
+import google_auth_httplib2
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.labels",
+    "https://www.googleapis.com/auth/gmail.metadata",
+    "https://mail.google.com/",
 ]
 
 # Error messages
@@ -48,6 +52,14 @@ class GmailClient:
         self.request_count = 0
         self.requests_per_minute = settings.RATE_LIMIT_REQUESTS
         self._last_request_time = 0
+
+        # Build the service if credentials are provided
+        if self.credentials and "token" in self.credentials:
+            try:
+                self._build_service()
+            except Exception:
+                logger.exception("Failed to build Gmail service")
+                # Don't raise here, let the service be None and handle it gracefully
 
     def authenticate(self) -> dict[str, Any]:
         """
@@ -90,16 +102,98 @@ class GmailClient:
             error_msg = NO_CREDENTIALS_ERROR
             raise ValueError(error_msg)
 
-        credentials = google.oauth2.credentials.Credentials(
-            token=self.credentials.get("token"),
-            refresh_token=self.credentials.get("refresh_token"),
-            token_uri=self.credentials.get("token_uri"),
-            client_id=self.credentials.get("client_id"),
-            client_secret=self.credentials.get("client_secret"),
-            scopes=self.credentials.get("scopes"),
+        # For minimal credentials with just a token, use default values for other fields
+        token = self.credentials.get("token")
+        if not token:
+            error_msg = "Token is required in credentials"
+            raise ValueError(error_msg)
+
+        # Use default values for missing fields
+        refresh_token = self.credentials.get("refresh_token")
+        token_uri = self.credentials.get(
+            "token_uri", "https://oauth2.googleapis.com/token"
+        )
+        client_id = self.credentials.get("client_id", os.getenv("GMAIL_CLIENT_ID", ""))
+        client_secret = self.credentials.get(
+            "client_secret", os.getenv("GMAIL_CLIENT_SECRET", "")
+        )
+        scopes = self.credentials.get("scopes", GMAIL_SCOPES)
+
+        # Check if we have all required fields for token refresh
+        has_refresh_capability = all(
+            [refresh_token, token_uri, client_id, client_secret]
         )
 
-        self.service = build("gmail", "v1", credentials=credentials)
+        # Log what we're using
+        logger.info(
+            f"Building Gmail service with token: {token[:10]}... and client_id: "
+            f"{client_id[:10] if client_id else 'None'}"
+        )
+        logger.info(f"Refresh token available: {bool(refresh_token)}")
+        logger.info(f"Has full refresh capability: {has_refresh_capability}")
+
+        try:
+            # If we don't have all required fields for refresh, we'll create
+            # credentials that can't be refreshed. This is fine for short-lived
+            # operations but will fail if the token expires
+            if not has_refresh_capability:
+                logger.warning(
+                    "Missing required fields for token refresh. "
+                    "Creating non-refreshable credentials."
+                )
+                logger.warning(
+                    "The application will fail if the token expires. "
+                    "Please re-authenticate."
+                )
+
+                # For API calls that don't require a refresh token
+                from google.auth.transport.requests import Request
+                from googleapiclient.http import build_http
+
+                credentials = google.oauth2.credentials.Credentials(
+                    token=token, scopes=scopes
+                )
+
+                # Create the service directly without refresh capability
+                http = build_http()
+                http = google_auth_httplib2.AuthorizedHttp(credentials, http=http)
+                self.service = build("gmail", "v1", http=http)
+                logger.info(
+                    "Gmail service built successfully with non-refreshable credentials"
+                )
+            else:
+                # Normal case with refresh token and all required fields
+                logger.info("Creating fully refreshable credentials")
+                credentials = google.oauth2.credentials.Credentials(
+                    token=token,
+                    refresh_token=refresh_token,
+                    token_uri=token_uri,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    scopes=scopes,
+                )
+
+                # Verify the token and refresh if needed
+                if credentials.expired:
+                    logger.info("Token is expired, refreshing...")
+                    request = Request()
+                    credentials.refresh(request)
+
+                    # Update our stored credentials with the new token
+                    self.credentials["token"] = credentials.token
+                    logger.info("Token refreshed successfully")
+
+                self.service = build("gmail", "v1", credentials=credentials)
+                logger.info(
+                    "Gmail service built successfully with refreshable credentials"
+                )
+        except Exception as e:
+            logger.exception("Failed to build Gmail service")
+            if "refresh" in str(e).lower():
+                logger.exception(
+                    "Token refresh failed. Please re-authenticate the application."
+                )
+            raise
 
     def _rate_limit_request(self) -> None:
         """

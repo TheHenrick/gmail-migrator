@@ -112,6 +112,8 @@ def test_authenticate(
         [
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.labels",
+            "https://www.googleapis.com/auth/gmail.metadata",
+            "https://mail.google.com/",
         ],
     )
     mock_flow.run_local_server.assert_called_once_with(port=0)

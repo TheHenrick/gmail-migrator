@@ -69,13 +69,13 @@ async def get_gmail_client(
 
 
 async def get_outlook_client(
-    authorization: Annotated[str | None, Header()] = None,
+    x_destination_token: Annotated[str | None, Header()] = None,
 ) -> OutlookClient:
     """
     Dependency to get an authenticated Outlook client.
 
     Args:
-        authorization: Authorization header with OAuth token
+        x_destination_token: Header with Outlook OAuth token
 
     Returns:
         Authenticated Outlook client
@@ -83,18 +83,15 @@ async def get_outlook_client(
     Raises:
         HTTPException: If unauthorized or token is invalid
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    if not x_destination_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header with Bearer token is required",
+            detail="X-Destination-Token header is required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract token
-    access_token = authorization.replace("Bearer ", "")
-
     try:
-        return OutlookClient(access_token)
+        return OutlookClient(x_destination_token)
     except Exception as e:
         logger.exception("Error creating Outlook client")
         raise HTTPException(

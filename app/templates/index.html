@@ -15,6 +15,54 @@
     <meta name="google-signin-client_id" content="{{ gmail_client_id }}">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Define core migration function directly -->
+    <script>
+        // Define a simple logging function that will be available immediately
+        function logMessage(message, type) {
+            console.log(`${new Date().toLocaleTimeString()} - ${message}`);
+        }
+
+        // Define the core migration function that will be enhanced by main.js
+        window.startMigration = function() {
+            console.log('%c MIGRATION STARTED! ', 'background: #4CAF50; color: white; font-size: 16px; padding: 5px;');
+
+            // Show loading state on button
+            const startMigrationBtn = document.getElementById('startMigration');
+            if (startMigrationBtn) {
+                startMigrationBtn.disabled = true;
+                startMigrationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Migrating...';
+                startMigrationBtn.classList.add('button-pressed');
+            }
+
+            // Log to console
+            logMessage('Starting migration process...', 'info');
+
+            // Perform the actual migration (this will be implemented in main.js)
+            try {
+                if (window.performMigration && typeof window.performMigration === 'function') {
+                    // If main.js has defined the implementation function, use it
+                    window.performMigration();
+                } else {
+                    // Fallback if main.js hasn't loaded properly
+                    logMessage('Migration implementation not found. Please refresh the page and try again.', 'error');
+                    setTimeout(resetButton, 2000);
+                }
+            } catch (error) {
+                console.error('Error during migration:', error);
+                logMessage('Error during migration: ' + error.message, 'error');
+                resetButton();
+            }
+
+            function resetButton() {
+                if (startMigrationBtn) {
+                    startMigrationBtn.disabled = false;
+                    startMigrationBtn.innerHTML = '<i class="fas fa-play"></i> Start Migration';
+                    startMigrationBtn.classList.remove('button-pressed');
+                }
+            }
+        };
+    </script>
 </head>
 <body>
     <div class="container">
@@ -174,61 +222,50 @@
                 </div>
             </section>
 
-            <button class="button primary start-button" id="startMigration" disabled data-tooltip="Please connect both source and destination accounts to start migration">
+            <button class="button primary start-button" id="startMigration" onclick="performMigration()" disabled data-tooltip="Please connect both source and destination accounts to start migration">
                 <i class="fas fa-play"></i> Start Migration
             </button>
 
-            <!-- Migration Status Section (Hidden by default) -->
-            <section class="migration-status" id="migrationStatus">
-                <h2>
-                    Migration in Progress
-                    <span class="spinner"></span>
-                </h2>
+            <!-- Migration Status Section -->
+            <div id="migrationStatus" class="migration-status-container" style="display: none;">
+                <h2>Migration in Progress</h2>
+                <div class="spinner"></div>
+                <p id="migrationProgress">0/0 emails processed</p>
+                <div class="progress-bar-container">
+                    <div id="progressBar" class="progress-bar" style="width: 0%;"></div>
+                    <span id="progressPercentage">0%</span>
+                </div>
 
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <div class="progress-bar-fill" id="progressBarFill"></div>
+                <div class="migration-stats">
+                    <div class="stat-box">
+                        <h3>Completed</h3>
+                        <p id="completedCount" class="stat-value success">0</p>
                     </div>
-                    <div class="progress-stats">
-                        <span id="processedCount">0/0 emails processed</span>
-                        <span id="progressPercentage">0%</span>
+                    <div class="stat-box">
+                        <h3>Pending</h3>
+                        <p id="pendingCount" class="stat-value info">0</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Failed</h3>
+                        <p id="failedCount" class="stat-value error">0</p>
                     </div>
                 </div>
 
-                <div class="migration-details">
-                    <div class="migration-summary">
-                        <div class="summary-card success">
-                            <h3>Completed</h3>
-                            <div class="number" id="successCount">0</div>
-                        </div>
-                        <div class="summary-card pending">
-                            <h3>Pending</h3>
-                            <div class="number" id="pendingCount">0</div>
-                        </div>
-                        <div class="summary-card failed">
-                            <h3>Failed</h3>
-                            <div class="number" id="failedCount">0</div>
-                        </div>
-                    </div>
+                <h3>Migration Log</h3>
+                <div id="migrationLog" class="migration-log"></div>
 
-                    <h3>Log</h3>
-                    <div class="migration-log" id="migrationLog">
-                        <!-- Log entries will be added here dynamically -->
-                    </div>
+                <div class="migration-controls">
+                    <button id="pauseMigration" class="button secondary"><i class="fas fa-pause"></i> Pause</button>
+                    <button id="cancelMigration" class="button danger"><i class="fas fa-times"></i> Cancel</button>
+                    <button id="downloadReport" class="button success"><i class="fas fa-download"></i> Download Report</button>
                 </div>
+            </div>
 
-                <div class="action-buttons">
-                    <button class="button primary" id="pauseResumeMigration">
-                        <i class="fas fa-pause"></i> Pause
-                    </button>
-                    <button class="button danger" id="cancelMigration">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                    <button class="button success" id="downloadReport" disabled>
-                        <i class="fas fa-download"></i> Download Report
-                    </button>
-                </div>
-            </section>
+            <!-- Migration Failed Alert -->
+            <div id="migrationFailedAlert" class="alert alert-error" style="display: none;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Migration Failed</span>
+            </div>
 
             <!-- OAuth Settings Modal -->
             <div id="oauthSettingsModal" class="modal">
@@ -306,5 +343,63 @@
     </div>
 
     <script src="{{ url_for('static', path='/js/main.js') }}"></script>
+
+    <!-- Ensure migration function is properly initialized -->
+    <script>
+        // Check if the main.js implementation has been loaded
+        setTimeout(function() {
+            console.log('Checking if main.js implementation is active...');
+
+            // Check if the performMigration function exists
+            if (typeof window.performMigration === 'function') {
+                console.log('Migration function is properly defined in main.js');
+
+                // Add a wrapper to show loading state on button
+                const originalPerformMigration = window.performMigration;
+                window.performMigration = function() {
+                    console.log('%c MIGRATION FUNCTION CALLED WITH UI WRAPPER ', 'background: #FF5722; color: white; font-size: 16px; padding: 5px;');
+
+                    // Show loading state on button
+                    const startMigrationBtn = document.getElementById('startMigration');
+                    if (startMigrationBtn) {
+                        startMigrationBtn.disabled = true;
+                        startMigrationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Migrating...';
+                        startMigrationBtn.classList.add('button-pressed');
+
+                        // Update tooltip to indicate this might take a while
+                        startMigrationBtn.setAttribute('data-tooltip', 'Migration in progress. This might take a while depending on the number of emails...');
+                    }
+
+                    // Call the original implementation
+                    originalPerformMigration();
+                };
+            } else {
+                console.error('Migration function not found in main.js');
+
+                // Define a fallback function
+                window.performMigration = function() {
+                    console.error('Migration implementation not found in main.js');
+
+                    const startMigrationBtn = document.getElementById('startMigration');
+                    if (startMigrationBtn) {
+                        startMigrationBtn.disabled = false;
+                        startMigrationBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+                        startMigrationBtn.classList.remove('button-pressed');
+
+                        // Reset tooltip
+                        startMigrationBtn.setAttribute('data-tooltip', 'Migration function not found. Please refresh the page and try again.');
+
+                        // Reset after 3 seconds
+                        setTimeout(function() {
+                            startMigrationBtn.innerHTML = '<i class="fas fa-play"></i> Start Migration';
+                            startMigrationBtn.setAttribute('data-tooltip', 'Please connect both source and destination accounts to start migration');
+                        }, 3000);
+                    }
+                };
+            }
+
+            console.log('Migration function initialization complete');
+        }, 1000);
+    </script>
 </body>
 </html>
