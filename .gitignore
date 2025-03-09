@@ -52,5 +52,6 @@ htmlcov/
 .cache/
 .local/
 
-# Token cache files
+# Token cache files (sensitive data)
 .outlook_token_cache.json
+.gmail_token_cache.json
