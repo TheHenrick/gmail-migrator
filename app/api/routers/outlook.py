@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client, get_outlook_client
 from app.services.gmail.client import GmailClient
-from app.services.outlook.auth import OutlookAuthManager
+from app.services.outlook.auth import OutlookAuthManager, OutlookAuthService
 from app.services.outlook.auth import oauth_flow as outlook_oauth_flow
 from app.services.outlook.client import OutlookClient
 
@@ -607,3 +607,41 @@ async def validate_outlook_token(request: Request) -> JSONResponse:
             status_code=401,
             content={"valid": False, "message": f"Outlook token is invalid: {str(e)}"},
         )
+
+
+@router.post("/refresh-token", response_model=dict)
+async def refresh_token(token_data: dict) -> dict:
+    """
+    Refresh an Outlook access token.
+
+    Args:
+        token_data: Dictionary containing the current token
+
+    Returns:
+        Dictionary with the new access token
+    """
+    try:
+        # Get the current token
+        current_token = token_data.get("token")
+        if not current_token:
+            return HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Token is required"
+            )
+
+        # Use the auth service to refresh the token
+        auth_service = OutlookAuthService()
+        new_token = await auth_service.refresh_token(current_token)
+
+        if not new_token:
+            return HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to refresh token",
+            )
+
+        return {"access_token": new_token}
+    except Exception as e:
+        logger.exception("Error refreshing Outlook token")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error refreshing token: {str(e)}",
+        ) from e

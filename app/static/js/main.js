@@ -184,6 +184,15 @@ async function refreshTokensBeforeMigration() {
     // Check if tokens exist
     const gmailToken = localStorage.getItem('gmailToken');
     const outlookToken = localStorage.getItem('outlookToken');
+    const gmailRefreshToken = localStorage.getItem('gmailRefreshToken');
+    const gmailUserInfo = localStorage.getItem('gmailUserInfo');
+    let parsedGmailUserInfo = null;
+
+    try {
+        parsedGmailUserInfo = gmailUserInfo ? JSON.parse(gmailUserInfo) : null;
+    } catch (e) {
+        console.warn('Failed to parse Gmail user info:', e);
+    }
 
     if (!gmailToken) {
         throw new Error('Gmail token not found. Please connect your Gmail account.');
@@ -193,8 +202,10 @@ async function refreshTokensBeforeMigration() {
         throw new Error('Outlook token not found. Please connect your Outlook account.');
     }
 
+    let refreshedGmailToken = gmailToken;
+    let refreshedOutlookToken = outlookToken;
+
     // Try to refresh Gmail token if we have a refresh token
-    const gmailRefreshToken = localStorage.getItem('gmailRefreshToken');
     if (gmailRefreshToken) {
         try {
             const response = await fetch('/gmail/refresh-token', {
@@ -208,6 +219,7 @@ async function refreshTokensBeforeMigration() {
             if (response.ok) {
                 const data = await response.json();
                 if (data.access_token) {
+                    refreshedGmailToken = data.access_token;
                     localStorage.setItem('gmailToken', data.access_token);
                     console.log('Gmail token refreshed successfully');
                 }
@@ -232,20 +244,38 @@ async function refreshTokensBeforeMigration() {
         if (response.ok) {
             const data = await response.json();
             if (data.access_token) {
+                refreshedOutlookToken = data.access_token;
                 localStorage.setItem('outlookToken', data.access_token);
                 console.log('Outlook token refreshed successfully');
             }
         } else {
             console.warn('Failed to refresh Outlook token:', await response.text());
+            // This is expected if the endpoint doesn't exist yet
+            console.log('Using existing Outlook token');
         }
     } catch (error) {
         console.warn('Error refreshing Outlook token:', error);
+        // This is expected if the endpoint doesn't exist yet
+        console.log('Using existing Outlook token');
     }
 
-    // Return the latest tokens
+    // Get client ID from meta tag
+    const clientId = document.querySelector('meta[name="google-signin-client_id"]')?.content || '';
+
+    // Return the tokens in the expected structure
     return {
-        gmailToken: localStorage.getItem('gmailToken'),
-        outlookToken: localStorage.getItem('outlookToken')
+        gmail: {
+            access_token: refreshedGmailToken,
+            refresh_token: gmailRefreshToken || '',
+            token_uri: "https://oauth2.googleapis.com/token",
+            client_id: clientId,
+            client_secret: '',
+            scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+            user_info: parsedGmailUserInfo
+        },
+        outlook: {
+            access_token: refreshedOutlookToken
+        }
     };
 }
 
@@ -289,139 +319,175 @@ window.performMigration = async function() {
 
         logToConsole(`Starting migration using ${useImportApi ? 'Import API' : 'Regular'} method...`, 'info');
 
-        // Refresh tokens before migration
-        const tokens = await refreshTokensBeforeMigration();
-        console.log('Tokens refreshed, proceeding with migration');
+        try {
+            // Refresh tokens before migration
+            const tokens = await refreshTokensBeforeMigration();
+            console.log('Tokens refreshed, proceeding with migration');
 
-        // Extract tokens
-        const gmailCredentials = {
-            token: tokens.gmail.access_token,
-            refresh_token: tokens.gmail.refresh_token,
-            token_uri: "https://oauth2.googleapis.com/token",
-            client_id: tokens.gmail.client_id,
-            client_secret: tokens.gmail.client_secret,
-            scopes: tokens.gmail.scopes,
-            user_info: tokens.gmail.user_info
-        };
-
-        const outlookToken = tokens.outlook.access_token;
-
-        // First migrate labels to folders
-        logToConsole('Migrating labels to folders...', 'info');
-
-        console.log('Sending request to /migration/gmail-to-outlook/labels');
-
-        fetch('/migration/gmail-to-outlook/labels', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                credentials: {
-                    gmail: gmailCredentials,
-                    destination: {
-                        token: outlookToken,
-                        provider: 'outlook'
-                    }
-                }
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to migrate labels: ${response.statusText}`);
+            if (!tokens || !tokens.gmail || !tokens.outlook) {
+                throw new Error('Failed to get valid tokens. Please reconnect your accounts.');
             }
-            return response.json();
-        })
-        .then(labelMapping => {
-            console.log('Label mapping result:', labelMapping);
-            logToConsole(`Successfully mapped ${Object.keys(labelMapping).length} labels to folders`, 'success');
 
-            // Then migrate all emails
-            logToConsole('Migrating all emails...', 'info');
+            if (!tokens.gmail.access_token) {
+                throw new Error('Gmail access token is missing. Please reconnect your Gmail account.');
+            }
 
-            // Prepare the full migration request body
-            const fullMigrationRequestBody = {
-                max_emails_per_label: 100,
-                credentials: {
-                    gmail: gmailCredentials,
-                    destination: {
-                        token: outlookToken,
-                        provider: 'outlook'
-                    }
-                }
+            if (!tokens.outlook.access_token) {
+                throw new Error('Outlook access token is missing. Please reconnect your Outlook account.');
+            }
+
+            // Extract tokens
+            const gmailCredentials = {
+                token: tokens.gmail.access_token,
+                refresh_token: tokens.gmail.refresh_token,
+                token_uri: "https://oauth2.googleapis.com/token",
+                client_id: tokens.gmail.client_id,
+                client_secret: tokens.gmail.client_secret,
+                scopes: tokens.gmail.scopes,
+                user_info: tokens.gmail.user_info
             };
 
-            // Choose the appropriate endpoint based on the selected migration type
-            const endpoint = useImportApi
-                ? '/migration/gmail-to-outlook/import-all'
-                : '/migration/gmail-to-outlook/all';
+            const outlookToken = tokens.outlook.access_token;
 
-            return fetch(endpoint, {
+            // First migrate labels to folders
+            logToConsole('Migrating labels to folders...', 'info');
+
+            console.log('Sending request to /migration/gmail-to-outlook/labels');
+
+            fetch('/migration/gmail-to-outlook/labels', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(fullMigrationRequestBody)
+                body: JSON.stringify({
+                    credentials: {
+                        gmail: gmailCredentials,
+                        destination: {
+                            token: outlookToken,
+                            provider: 'outlook'
+                        }
+                    }
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to migrate labels: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(labelMapping => {
+                console.log('Label mapping result:', labelMapping);
+                logToConsole(`Successfully mapped ${Object.keys(labelMapping).length} labels to folders`, 'success');
+
+                // Then migrate all emails
+                logToConsole('Migrating all emails...', 'info');
+
+                // Prepare the full migration request body
+                const fullMigrationRequestBody = {
+                    max_emails_per_label: 100,
+                    credentials: {
+                        gmail: gmailCredentials,
+                        destination: {
+                            token: outlookToken,
+                            provider: 'outlook'
+                        }
+                    }
+                };
+
+                // Choose the appropriate endpoint based on the selected migration type
+                const endpoint = useImportApi
+                    ? '/migration/gmail-to-outlook/import-all'
+                    : '/migration/gmail-to-outlook/all';
+
+                console.log(`Using endpoint: ${endpoint} for migration`);
+
+                return fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(fullMigrationRequestBody)
+                });
+            })
+            .then(response => {
+                console.log('Migration response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`Failed to migrate emails: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(migrationResult => {
+                console.log('Migration result:', migrationResult);
+
+                // Log the results
+                const successCount = migrationResult.results?.successful || 0;
+                const totalCount = migrationResult.results?.total || 0;
+                const failedCount = migrationResult.results?.failed || 0;
+
+                logToConsole(`Migration complete: ${successCount} of ${totalCount} emails migrated successfully`, 'success');
+
+                if (failedCount > 0) {
+                    logToConsole(`[WARNING] ${failedCount} emails failed to migrate`, 'warning');
+                }
+
+                // The UI will be updated by the SSE connection
+            })
+            .catch(error => {
+                console.error('Migration error:', error);
+                logToConsole(`Migration error: ${error.message}`, 'error');
+
+                // Show error message to the user
+                if (errorElement) {
+                    errorElement.style.display = 'block';
+                    const messageSpan = document.getElementById('migrationFailedMessage');
+                    if (messageSpan) {
+                        messageSpan.textContent = `Migration Failed: ${error.message}`;
+                    } else {
+                        errorElement.textContent = `Migration Failed: ${error.message}`;
+                    }
+                }
+
+                // Reset the migration button
+                resetMigrationButton();
+
+                // Check if it's an authentication error
+                if (error.message.includes('authentication') ||
+                    error.message.includes('Authentication') ||
+                    error.message.includes('Unauthorized') ||
+                    error.message.includes('unauthorized') ||
+                    error.message.includes('token') ||
+                    error.message.includes('credentials')) {
+
+                    console.log('Authentication-related error detected, resetting connections');
+                    // Force reset all authentication state and UI
+                    forceResetAuthState();
+                }
+
+                // Close the event source
+                if (migrationEventSource) {
+                    migrationEventSource.close();
+                    migrationEventSource = null;
+                }
             });
-        })
-        .then(response => {
-            console.log('Migration response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`Failed to migrate emails: ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(migrationResult => {
-            console.log('Migration result:', migrationResult);
-
-            // Log the results
-            const successCount = migrationResult.successful || 0;
-            const totalCount = migrationResult.total || 0;
-            const failedCount = migrationResult.failed || 0;
-
-            logToConsole(`Migration complete: ${successCount} of ${totalCount} emails migrated successfully`, 'success');
-
-            if (failedCount > 0) {
-                logToConsole(`[WARNING] ${failedCount} emails failed to migrate`, 'warning');
-            }
-
-            // The UI will be updated by the SSE connection
-        })
-        .catch(error => {
-            console.error('Migration error:', error);
-            logToConsole(`Migration error: ${error.message}`, 'error');
+        } catch (tokenError) {
+            console.error('Token error:', tokenError);
+            logToConsole(`Token error: ${tokenError.message}`, 'error');
 
             // Show error message to the user
-            const errorElement = document.createElement('div');
-            errorElement.className = 'alert alert-danger';
-            errorElement.textContent = `Migration Failed: ${error.message}`;
+            if (errorElement) {
+                errorElement.style.display = 'block';
+                const messageSpan = document.getElementById('migrationFailedMessage');
+                if (messageSpan) {
+                    messageSpan.textContent = `Migration Failed: ${tokenError.message}`;
+                } else {
+                    errorElement.textContent = `Migration Failed: ${tokenError.message}`;
+                }
+            }
 
-            // Insert the error message at the top of the page
-            const container = document.querySelector('.container') || document.body;
-            container.insertBefore(errorElement, container.firstChild);
-
-            // Update button state
+            // Reset the migration button
             resetMigrationButton();
-
-            // Check if it's an authentication error
-            if (error.message.includes('authentication') ||
-                error.message.includes('Authentication') ||
-                error.message.includes('Unauthorized') ||
-                error.message.includes('unauthorized') ||
-                error.message.includes('token') ||
-                error.message.includes('credentials')) {
-
-                console.log('Authentication-related error detected, resetting connections');
-                // Force reset all authentication state and UI
-                forceResetAuthState();
-            }
-
-            // Close the event source
-            if (migrationEventSource) {
-                migrationEventSource.close();
-                migrationEventSource = null;
-            }
-        });
+            return;
+        }
     } catch (error) {
         console.error('Migration error:', error);
         logToConsole(`Error during migration: ${error.message}`, 'error');
