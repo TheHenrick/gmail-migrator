@@ -542,19 +542,30 @@ class OutlookClient:
         Returns:
             Dict[str, Any]: Imported message information
         """
-        # Upload as MIME content
-        headers = {
-            "Content-Type": "text/plain",
-        }
+        # The error "$value cannot be applied to a collection" occurs because
+        # we're trying to use $value on a collection endpoint.
+        # We need to use the /messages endpoint without $value and let the API
+        # create a new message
         endpoint = (
-            f"/me/mailfolders/{folder_id}/messages/$value"
-            if folder_id
-            else "/me/messages/$value"
+            f"/me/mailfolders/{folder_id}/messages" if folder_id else "/me/messages"
         )
 
-        request_data = {"headers": headers, "data": mime_content}
+        # For importing emails with MIME content, we need to use a different approach
+        # Create a JSON payload with the MIME content as a property
+        encoded_content = base64.b64encode(mime_content.encode("utf-8")).decode("utf-8")
 
-        return self._make_request("POST", endpoint, request_data=request_data)
+        data = {
+            "message": {
+                # This will be overridden by the MIME content
+                "subject": "Imported Email",
+            },
+            "mimeContent": {
+                "content": encoded_content,
+                "contentType": "message/rfc822",
+            },
+        }
+
+        return self._make_request("POST", endpoint, data=data)
 
     def migrate_email(
         self,

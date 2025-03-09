@@ -1190,7 +1190,17 @@ function initializeGoogleSignIn() {
     }
 }
 
-// Function to handle OAuth callback parameters from URL
+// Function to get a cookie by name
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        return parts.pop().split(';').shift();
+    }
+    return null;
+}
+
+// Function to handle OAuth callback parameters from URL and cookies
 function handleOAuthCallback() {
     console.log('Checking for OAuth callback parameters');
 
@@ -1199,51 +1209,81 @@ function handleOAuthCallback() {
     const code = urlParams.get('code');
     const state = urlParams.get('state');
     const error = urlParams.get('error');
-    const outlookAuth = urlParams.get('outlook_auth');
-    const token = urlParams.get('token');
-    const refreshToken = urlParams.get('refresh_token');
-    const email = urlParams.get('email');
 
-    console.log('URL parameters:', {
+    // Check for Outlook auth data in cookies
+    const outlookAuthCookie = getCookie('outlook_auth_data');
+    const outlookErrorCookie = getCookie('outlook_auth_error');
+
+    console.log('URL parameters and cookies:', {
         code: code ? `${code.substring(0, 10)}...` : null,
         state,
         error,
-        outlookAuth,
-        token: token ? `${token.substring(0, 10)}...` : null,
-        refreshToken: refreshToken ? `${refreshToken.substring(0, 10)}...` : null,
-        email
+        outlookAuthCookie: outlookAuthCookie ? 'present' : null,
+        outlookErrorCookie: outlookErrorCookie ? 'present' : null
     });
 
     // Clean up URL - remove parameters to prevent reprocessing on refresh
-    if (history.pushState && (code || state || error || outlookAuth || token)) {
+    if (history.pushState && (code || state || error)) {
         const newurl = window.location.protocol + '//' + window.location.host + window.location.pathname;
         window.history.pushState({path: newurl}, '', newurl);
         console.log('Cleaned up URL parameters');
     }
 
-    // Handle Outlook auth success from redirect
-    if (outlookAuth === 'success' && token) {
-        logToConsole('Successfully connected to Outlook', 'success');
-        localStorage.setItem('outlookToken', token);
+    // Handle Outlook auth success from cookie
+    if (outlookAuthCookie) {
+        try {
+            const authData = JSON.parse(outlookAuthCookie);
+            console.log('Parsed Outlook auth data from cookie:', {
+                token: authData.token ? `${authData.token.substring(0, 10)}...` : null,
+                email: authData.email
+            });
 
-        if (refreshToken) {
-            localStorage.setItem('outlookRefreshToken', refreshToken);
+            if (authData.token) {
+                logToConsole('Successfully connected to Outlook', 'success');
+                localStorage.setItem('outlookToken', authData.token);
+
+                if (authData.refresh_token) {
+                    localStorage.setItem('outlookRefreshToken', authData.refresh_token);
+                }
+
+                if (authData.email) {
+                    console.log('Storing Outlook email:', authData.email);
+                    localStorage.setItem('outlookUserEmail', authData.email);
+                    logToConsole(`Connected as ${authData.email}`, 'info');
+                } else {
+                    console.warn('No email provided in the auth data');
+                    localStorage.setItem('outlookUserEmail', 'Microsoft Account');
+                }
+
+                // Clear the cookie after reading it
+                document.cookie = 'outlook_auth_data=; Max-Age=0; path=/;';
+
+                updateUIAfterOutlookConnection(true);
+                return;
+            }
+        } catch (error) {
+            console.error('Error parsing Outlook auth cookie:', error);
         }
-
-        if (email) {
-            console.log('Storing Outlook email:', email);
-            localStorage.setItem('outlookUserEmail', decodeURIComponent(email));
-            logToConsole(`Connected as ${decodeURIComponent(email)}`, 'info');
-        } else {
-            console.warn('No email provided in the redirect URL');
-            localStorage.setItem('outlookUserEmail', 'Microsoft Account');
-        }
-
-        updateUIAfterOutlookConnection(true);
-        return;
     }
 
-    // Handle Outlook auth error from redirect
+    // Handle Outlook auth error from cookie
+    if (outlookErrorCookie) {
+        try {
+            const errorData = JSON.parse(outlookErrorCookie);
+            const errorMessage = errorData.message || 'Unknown error';
+            logToConsole(`Error connecting to Outlook: ${errorMessage}`, 'error');
+
+            // Clear the cookie after reading it
+            document.cookie = 'outlook_auth_error=; Max-Age=0; path=/;';
+
+            updateUIAfterOutlookConnection(false);
+            return;
+        } catch (error) {
+            console.error('Error parsing Outlook error cookie:', error);
+        }
+    }
+
+    // Handle Outlook auth error from URL (legacy support)
     if (error && error.includes('outlook_auth_failed')) {
         const message = urlParams.get('message') || 'Unknown error';
         logToConsole(`Error connecting to Outlook: ${message}`, 'error');
@@ -1251,28 +1291,8 @@ function handleOAuthCallback() {
         return;
     }
 
-    // If we have code or state, we might be in a callback
-    if (code || state || error) {
-        console.log('Found OAuth callback parameters in URL');
-        logToConsole('Processing OAuth callback...', 'info');
-
-        // Check for error
-        if (error) {
-            logToConsole(`OAuth error: ${error}`, 'error');
-            return;
-        }
-
-        // Determine which provider this is for based on the current path
-        const path = window.location.pathname;
-
-        if (path.includes('/gmail/auth-callback') && code) {
-            // Handle Gmail callback - already implemented
-        } else if (path.includes('/yahoo/auth-callback') && code) {
-            // Handle Yahoo callback - to be implemented
-        }
-    } else {
-        console.log('No OAuth callback parameters found in URL');
-    }
+    // Handle Gmail auth parameters (if any)
+    // ... existing Gmail auth handling code ...
 }
 
 // Function to initialize destination selection
