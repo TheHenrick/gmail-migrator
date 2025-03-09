@@ -10,9 +10,10 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
     status,
 )
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client, get_gmail_redirect_uri
@@ -362,3 +363,43 @@ async def fetch_user_profile(access_token: str) -> str:
     except Exception as e:
         logger.exception("Error fetching user profile")
         raise_server_error("Failed to fetch user profile", e)
+
+
+@router.get("/validate-token")
+async def validate_gmail_token(request: Request) -> JSONResponse:
+    """
+    Validates if the provided Gmail token is still valid.
+
+    Args:
+        request: The FastAPI request object
+
+    Returns:
+        JSONResponse: A JSON response indicating if the token is valid
+    """
+    try:
+        # Get the token from the session
+        token = request.session.get("gmail_token")
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={"valid": False, "message": "No Gmail token found in session"},
+            )
+
+        # Create a Gmail client with the token
+        gmail_client = GmailClient(token=token)
+
+        # Try to make a simple API call to validate the token
+        # This will throw an exception if the token is invalid
+        gmail_client.list_labels()
+
+        # If we get here, the token is valid
+        return JSONResponse(
+            status_code=200,
+            content={"valid": True, "message": "Gmail token is valid"},
+        )
+    except Exception as e:
+        logger.exception("Gmail token validation error")
+        return JSONResponse(
+            status_code=401,
+            content={"valid": False, "message": f"Gmail token is invalid: {str(e)}"},
+        )

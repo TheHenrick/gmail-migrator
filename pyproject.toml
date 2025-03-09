@@ -24,6 +24,7 @@ oauth2client = "^4.1.3"
 msal = "^1.28.0"
 httpx = "^0.27.0"
 pyjwt = "^2.8.0"
+sse-starlette = "^2.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -122,6 +123,14 @@ ignore = [
 "app/services/gmail/client.py" = [
     "PLR0912", # Allow complex function with many branches (parse_email_content)
 ]
+"app/services/outlook/client.py" = [
+    "PLR0913", # Allow function with many arguments (_make_request)
+    "PLR0912", # Allow complex function with many branches (_make_request)
+    "PLR0915", # Allow function with many statements (_make_request)
+]
+"app/services/migration/gmail_to_outlook.py" = [
+    "PLR0912", # Allow complex function with many branches (migrate_emails_by_label)
+]
 "wsgi.py" = [
     "S104",   # Allow binding to all interfaces in debug mode
 ]
@@ -159,7 +168,7 @@ disallow_incomplete_defs = false
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "--cov=app --cov-report=term --cov-report=html"
+addopts = ""
 
 [build-system]
 requires = ["poetry-core"]

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
-from app.api.routers import gmail, outlook
+from app.api.routers import gmail, migration, outlook
 from app.config import settings
 
 # Configure logging
@@ -48,6 +48,7 @@ def create_app(testing: bool = False) -> FastAPI:
     # Register API routers
     app.include_router(gmail.router)
     app.include_router(outlook.router)
+    app.include_router(migration.router)
 
     # For testing compatibility
     if testing:
