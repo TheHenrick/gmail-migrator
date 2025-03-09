@@ -63,6 +63,106 @@
             }
         };
     </script>
+
+    <style>
+        /* Migration Options Styles */
+        .migration-options {
+            margin-bottom: 20px;
+        }
+
+        .option-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .option-group h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            transition: all 0.2s ease;
+        }
+
+        .radio-option:hover {
+            border-color: #007aff;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.1);
+        }
+
+        .radio-option input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .radio-option label {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+
+        .option-description {
+            margin: 5px 0 0 25px;
+            font-size: 13px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        /* Alert Styles */
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+        }
+
+        .alert i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+
+        .alert-error {
+            background-color: #ffebee;
+            color: #d32f2f;
+            border: 1px solid #ffcdd2;
+        }
+
+        .alert-success {
+            background-color: #e8f5e9;
+            color: #388e3c;
+            border: 1px solid #c8e6c9;
+        }
+
+        .alert-warning {
+            background-color: #fff8e1;
+            color: #f57c00;
+            border: 1px solid #ffecb3;
+        }
+
+        .alert-info {
+            background-color: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -222,9 +322,21 @@
                 </div>
             </section>
 
-            <button class="button primary start-button" id="startMigration" onclick="performMigration()" disabled data-tooltip="Please connect both source and destination accounts to start migration">
-                <i class="fas fa-play"></i> Start Migration
-            </button>
+            <!-- Migration Options -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Migration Options</h2>
+                </div>
+                <div class="card-body">
+                    <div id="migrationOptions" class="migration-options">
+                        <!-- Migration options will be added here by JavaScript -->
+                    </div>
+
+                    <button class="button primary start-button" id="startMigration" onclick="performMigration()" disabled data-tooltip="Please connect both source and destination accounts to start migration">
+                        <i class="fas fa-play"></i> Start Migration
+                    </button>
+                </div>
+            </div>
 
             <!-- Migration Status Section -->
             <div id="migrationStatus" class="migration-status-container" style="display: none;">
@@ -264,7 +376,7 @@
             <!-- Migration Failed Alert -->
             <div id="migrationFailedAlert" class="alert alert-error" style="display: none;">
                 <i class="fas fa-exclamation-triangle"></i>
-                <span>Migration Failed</span>
+                <span id="migrationFailedMessage">Migration Failed</span>
             </div>
 
             <!-- OAuth Settings Modal -->

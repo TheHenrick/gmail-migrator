@@ -1,18 +1,19 @@
 """Router for Outlook-related API endpoints."""
 
 import base64
+import json
 import logging
 from typing import Annotated, Any
-from urllib.parse import quote
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
+from app.config import settings
 from app.dependencies import get_gmail_client, get_outlook_client
 from app.services.gmail.client import GmailClient
-from app.services.outlook.auth import OutlookAuthManager
+from app.services.outlook.auth import OutlookAuthManager, OutlookAuthService
 from app.services.outlook.auth import oauth_flow as outlook_oauth_flow
 from app.services.outlook.client import OutlookClient
 
@@ -291,25 +292,43 @@ async def auth_callback_get(
             if profile_email != "Microsoft Account":
                 user_email = profile_email
 
-        # URL encode the email to avoid issues with special characters
-        encoded_email = quote(user_email)
-        logger.info(f"Encoded email: {encoded_email}")
+        # Create the response with a redirect to the main page
+        response = RedirectResponse(url="/")
 
-        # Redirect to main page with success parameter
-        # We'll handle storing the token in localStorage via JavaScript
-        redirect_url = f"/?outlook_auth=success&token={token_info['access_token']}"
+        # Store auth data in a secure cookie instead of URL parameters
+        auth_data = {"token": token_info["access_token"], "email": user_email}
 
         if "refresh_token" in token_info and token_info["refresh_token"]:
-            redirect_url += f"&refresh_token={token_info['refresh_token']}"
+            auth_data["refresh_token"] = token_info["refresh_token"]
 
-        redirect_url += f"&email={encoded_email}"
+        # Set a secure cookie with the auth data
+        response.set_cookie(
+            key="outlook_auth_data",
+            value=json.dumps(auth_data),
+            max_age=60,  # Short-lived cookie (60 seconds)
+            httponly=False,  # Allow JavaScript to read it
+            secure=settings.ENVIRONMENT != "development",  # Secure in production
+            samesite="lax",  # Prevent CSRF
+        )
 
-        logger.info(f"Redirecting to: {redirect_url}")
-        return RedirectResponse(url=redirect_url)
+        logger.info("Redirecting to main page with auth data in cookie")
+        return response
     except Exception as e:
         logger.exception("Failed to exchange authorization code")
         # Redirect to main page with error parameter
-        return RedirectResponse(url=f"/?error=outlook_auth_failed&message={str(e)}")
+        response = RedirectResponse(url="/")
+
+        # Set error cookie
+        response.set_cookie(
+            key="outlook_auth_error",
+            value=json.dumps({"error": "outlook_auth_failed", "message": str(e)}),
+            max_age=60,  # Short-lived cookie (60 seconds)
+            httponly=False,  # Allow JavaScript to read it
+            secure=settings.ENVIRONMENT != "development",  # Secure in production
+            samesite="lax",  # Prevent CSRF
+        )
+
+        return response
 
 
 def _validate_auth_code(auth_code: str) -> None:
@@ -607,3 +626,41 @@ async def validate_outlook_token(request: Request) -> JSONResponse:
             status_code=401,
             content={"valid": False, "message": f"Outlook token is invalid: {str(e)}"},
         )
+
+
+@router.post("/refresh-token", response_model=dict)
+async def refresh_token(token_data: dict) -> dict:
+    """
+    Refresh an Outlook access token.
+
+    Args:
+        token_data: Dictionary containing the current token
+
+    Returns:
+        Dictionary with the new access token
+    """
+    try:
+        # Get the current token
+        current_token = token_data.get("token")
+        if not current_token:
+            return HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Token is required"
+            )
+
+        # Use the auth service to refresh the token
+        auth_service = OutlookAuthService()
+        new_token = await auth_service.refresh_token(current_token)
+
+        if not new_token:
+            return HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to refresh token",
+            )
+
+        return {"access_token": new_token}
+    except Exception as e:
+        logger.exception("Error refreshing Outlook token")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error refreshing token: {str(e)}",
+        ) from e
