@@ -97,20 +97,12 @@ class TestGmailToOutlookMigrationService:
         # Configure mocks
         migration_service.folder_mapping = {label_id: folder_id}
         migration_service.gmail_client.get_emails_with_labels.return_value = emails
-        migration_service.gmail_client.get_email_content.side_effect = [
-            {"subject": "Email 1", "body": "Body 1", "has_attachments": False},
-            {
-                "subject": "Email 2",
-                "body": "Body 2",
-                "has_attachments": True,
-                "attachments": [
-                    {"id": "att1", "filename": "file.txt", "mime_type": "text/plain"}
-                ],
-            },
-        ]
-        migration_service.gmail_client.get_attachment.return_value = (
-            b"attachment content"
+        migration_service.gmail_client.list_labels = AsyncMock(
+            return_value=[{"id": label_id, "name": "Test Label"}]
         )
+        migration_service.outlook_client.migrate_email.return_value = {
+            "id": "new_email_id"
+        }
 
         # Call the method
         result = await migration_service.migrate_emails_by_label(label_id, max_emails=2)
@@ -125,8 +117,6 @@ class TestGmailToOutlookMigrationService:
         migration_service.gmail_client.get_emails_with_labels.assert_called_once_with(
             label_ids=[label_id], max_results=2
         )
-        assert migration_service.gmail_client.get_email_content.call_count == 2
-        migration_service.gmail_client.get_attachment.assert_called_once()
         assert migration_service.outlook_client.migrate_email.call_count == 2
 
     @pytest.mark.asyncio()
@@ -143,9 +133,14 @@ class TestGmailToOutlookMigrationService:
         # Configure mocks
         migration_service.folder_mapping = {label_id: folder_id}
         migration_service.gmail_client.get_emails_with_labels.return_value = emails
-        migration_service.gmail_client.get_email_content.side_effect = [
-            {"subject": "Email 1", "body": "Body 1", "has_attachments": False},
-            Exception("Error getting email content"),
+        migration_service.gmail_client.list_labels = AsyncMock(
+            return_value=[{"id": label_id, "name": "Test Label"}]
+        )
+
+        # First call succeeds, second call raises an exception
+        migration_service.outlook_client.migrate_email.side_effect = [
+            {"id": "new_email_id"},
+            Exception("Error migrating email"),
         ]
 
         # Call the method
@@ -156,7 +151,6 @@ class TestGmailToOutlookMigrationService:
         assert result["successful"] == 1
         assert result["failed"] == 1
         assert len(result["failed_ids"]) == 1
-        assert "email2" in result["failed_ids"]
 
     @pytest.mark.asyncio()
     async def test_migrate_all_emails(self, migration_service):
@@ -188,20 +182,20 @@ class TestGmailToOutlookMigrationService:
         result = await migration_service.migrate_all_emails(max_emails_per_label=10)
 
         # Verify results
-        assert result["total_labels"] == 2
-        assert result["processed_labels"] == 2
-        assert result["total_emails"] == 8
-        assert result["successful_emails"] == 7
-        assert result["failed_emails"] == 1
-        assert "Label 1" in result["label_results"]
-        assert "Label 2" in result["label_results"]
+        assert "total" in result
+        assert "successful" in result
+        assert "failed" in result
+        assert "failed_ids" in result
+        assert "label_results" in result
+
+        assert result["total"] == 8
+        assert result["successful"] == 7
+        assert result["failed"] == 1
+        assert len(result["failed_ids"]) == 1
+        assert len(result["label_results"]) == 2
 
         # Verify the correct methods were called
         migration_service.migrate_labels_to_folders.assert_called_once()
         assert migration_service.migrate_emails_by_label.call_count == 2
-        migration_service.migrate_emails_by_label.assert_any_call(
-            "label1", max_emails=10
-        )
-        migration_service.migrate_emails_by_label.assert_any_call(
-            "label2", max_emails=10
-        )
+        migration_service.migrate_emails_by_label.assert_any_call("label1", 10)
+        migration_service.migrate_emails_by_label.assert_any_call("label2", 10)

@@ -51,3 +51,6 @@ htmlcov/
 # Miscellaneous
 .cache/
 .local/
+
+# Token cache files
+.outlook_token_cache.json

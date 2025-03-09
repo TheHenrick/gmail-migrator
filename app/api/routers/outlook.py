@@ -6,8 +6,8 @@ from typing import Annotated, Any
 from urllib.parse import quote
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.dependencies import get_gmail_client, get_outlook_client
@@ -564,3 +564,46 @@ async def batch_migrate(
             results["failed_ids"].append(email_id)
 
     return results
+
+
+@router.get("/validate-token")
+async def validate_outlook_token(request: Request) -> JSONResponse:
+    """
+    Validates if the provided Outlook token is still valid.
+
+    Args:
+        request: The FastAPI request object
+
+    Returns:
+        JSONResponse: A JSON response indicating if the token is valid
+    """
+    try:
+        # Get the token from the session
+        token = request.session.get("outlook_token")
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "valid": False,
+                    "message": "No Outlook token found in session",
+                },
+            )
+
+        # Create an Outlook client with the token
+        outlook_client = OutlookClient(token=token)
+
+        # Try to make a simple API call to validate the token
+        # This will throw an exception if the token is invalid
+        outlook_client.list_mail_folders()
+
+        # If we get here, the token is valid
+        return JSONResponse(
+            status_code=200,
+            content={"valid": True, "message": "Outlook token is valid"},
+        )
+    except Exception as e:
+        logger.exception("Outlook token validation error")
+        return JSONResponse(
+            status_code=401,
+            content={"valid": False, "message": f"Outlook token is invalid: {str(e)}"},
+        )
