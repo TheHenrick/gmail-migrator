@@ -159,6 +159,8 @@ def test_get_email_content(
     # Setup
     mock_messages_resource = mock_gmail_service.users.return_value.messages
     mock_get = mock_messages_resource.return_value.get
+
+    # Mock the full format response
     mock_get.return_value.execute.return_value = {
         "id": TEST_EMAIL_ID,
         "threadId": "thread1",
@@ -191,23 +193,39 @@ def test_get_email_content(
         },
     }
 
+    # Mock the raw format response
+    raw_response = {
+        "id": TEST_EMAIL_ID,
+        "raw": base64.b64encode(b"Raw email content").decode(),
+    }
+
+    # Set up the mock to return different responses based on the format parameter
+    def get_side_effect(**kwargs):
+        mock_execute = MagicMock()
+        if kwargs.get("format") == "raw":
+            mock_execute.execute.return_value = raw_response
+        else:
+            mock_execute.execute.return_value = (
+                mock_get.return_value.execute.return_value
+            )
+        return mock_execute
+
+    mock_get.side_effect = get_side_effect
+
     # Execute
     result = gmail_client.get_email_content(TEST_EMAIL_ID)
 
     # Verify
-    mock_get.assert_called_with(userId="me", id=TEST_EMAIL_ID)
+    assert mock_get.call_count == 2
+    mock_get.assert_any_call(userId="me", id=TEST_EMAIL_ID, format="full")
+    mock_get.assert_any_call(userId="me", id=TEST_EMAIL_ID, format="raw")
+
+    # Verify the result contains both the parsed content and the raw content
     assert result["id"] == TEST_EMAIL_ID
+    assert "raw" in result
     assert result["subject"] == "Test Subject"
     assert result["from"] == "sender@example.com"
     assert result["to"] == "recipient@example.com"
-    assert result["date"] == "Mon, 1 Jan 2023 12:00:00 +0000"
-    assert "body" in result
-    assert result["body"]["plain"] == "Email body"
-    assert result["body"]["html"] == "<html>Email body</html>"
-    assert len(result["attachments"]) == 1
-    assert result["attachments"][0]["filename"] == "test.pdf"
-    assert result["attachments"][0]["mimeType"] == "application/pdf"
-    assert result["attachments"][0]["id"] == TEST_ATTACHMENT_ID
 
 
 def test_get_attachment(

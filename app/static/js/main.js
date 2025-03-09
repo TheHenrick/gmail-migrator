@@ -254,10 +254,10 @@ window.performMigration = async function() {
     try {
         console.log('Starting migration process');
 
-        // Initialize the SSE connection for status updates
+        // Initialize the status updates
         initMigrationStatusUpdates();
 
-        // Show loading state
+        // Update UI
         const startMigrationBtn = document.getElementById('startMigration');
         if (startMigrationBtn) {
             startMigrationBtn.disabled = true;
@@ -277,201 +277,151 @@ window.performMigration = async function() {
             migrationLog.innerHTML = '';
         }
 
-        // Get the selected destination
-        const destinationSelect = document.getElementById('destinationSelect');
-        const destination = destinationSelect ? destinationSelect.value : 'outlook';
-        console.log('Selected destination:', destination);
+        // Hide any previous error messages
+        const errorElement = document.getElementById('migrationFailedAlert');
+        if (errorElement) {
+            errorElement.style.display = 'none';
+        }
 
-        // Remove any existing error messages
-        const existingErrors = document.querySelectorAll('.alert.alert-danger');
-        existingErrors.forEach(error => error.remove());
+        // Get the selected migration type
+        const regularMigration = document.getElementById('regularMigration');
+        const useImportApi = regularMigration ? !regularMigration.checked : false;
 
-        if (destination === 'outlook') {
-            // First refresh tokens
-            try {
-                const tokens = await refreshTokensBeforeMigration();
-                console.log('Tokens refreshed, proceeding with migration');
+        logToConsole(`Starting migration using ${useImportApi ? 'Import API' : 'Regular'} method...`, 'info');
 
-                // Get the tokens from localStorage (now refreshed)
-                const gmailToken = tokens.gmailToken;
-                const gmailRefreshToken = localStorage.getItem('gmailRefreshToken');
-                const outlookToken = tokens.outlookToken;
+        // Refresh tokens before migration
+        const tokens = await refreshTokensBeforeMigration();
+        console.log('Tokens refreshed, proceeding with migration');
 
-                // Log the tokens (partially masked for security)
-                console.log('Gmail token:', gmailToken.substring(0, 10) + '...');
-                console.log('Gmail refresh token:', gmailRefreshToken ? gmailRefreshToken.substring(0, 10) + '...' : 'Not available');
-                console.log('Outlook token:', outlookToken.substring(0, 10) + '...');
+        // Extract tokens
+        const gmailCredentials = {
+            token: tokens.gmail.access_token,
+            refresh_token: tokens.gmail.refresh_token,
+            token_uri: "https://oauth2.googleapis.com/token",
+            client_id: tokens.gmail.client_id,
+            client_secret: tokens.gmail.client_secret,
+            scopes: tokens.gmail.scopes,
+            user_info: tokens.gmail.user_info
+        };
 
-                // Prepare the credentials object in the format expected by the server
-                const gmailCredentials = {
-                    token: gmailToken,
-                    refresh_token: gmailRefreshToken || '',
-                    client_id: document.querySelector('meta[name="google-signin-client_id"]')?.content || '',
-                    client_secret: '',
-                    token_uri: 'https://oauth2.googleapis.com/token'
-                };
+        const outlookToken = tokens.outlook.access_token;
 
-                // Prepare the credentials request body
-                const credentialsRequestBody = {
-                    credentials: {
-                        gmail: gmailCredentials,
-                        destination: {
-                            token: outlookToken,
-                            provider: 'outlook'
-                        }
+        // First migrate labels to folders
+        logToConsole('Migrating labels to folders...', 'info');
+
+        console.log('Sending request to /migration/gmail-to-outlook/labels');
+
+        fetch('/migration/gmail-to-outlook/labels', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                credentials: {
+                    gmail: gmailCredentials,
+                    destination: {
+                        token: outlookToken,
+                        provider: 'outlook'
                     }
-                };
+                }
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to migrate labels: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(labelMapping => {
+            console.log('Label mapping result:', labelMapping);
+            logToConsole(`Successfully mapped ${Object.keys(labelMapping).length} labels to folders`, 'success');
 
-                // First migrate labels to folders
-                logToConsole('Migrating Gmail labels to Outlook folders...', 'info');
-                console.log('Sending request to /migration/gmail-to-outlook/labels');
+            // Then migrate all emails
+            logToConsole('Migrating all emails...', 'info');
 
-                // Use Promise-based approach for better readability
-                fetch('/migration/gmail-to-outlook/labels', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(credentialsRequestBody)
-                })
-                .then(response => {
-                    console.log('Labels response status:', response.status);
-                    if (!response.ok) {
-                        // Handle authentication errors
-                        if (response.status === 401) {
-                            return response.text().then(text => {
-                                console.error('Authentication error:', text);
-                                logToConsole('Authentication failed. Please reconnect your accounts.', 'error');
-
-                                // Show error message to the user
-                                const errorElement = document.createElement('div');
-                                errorElement.className = 'alert alert-danger';
-                                errorElement.textContent = 'Migration Failed: Failed to migrate labels: Unauthorized';
-
-                                // Insert the error message at the top of the page
-                                const container = document.querySelector('.container') || document.body;
-                                container.insertBefore(errorElement, container.firstChild);
-
-                                // Reset the migration button
-                                resetMigrationButton();
-
-                                // Force reset all authentication state and UI
-                                forceResetAuthState();
-
-                                throw new Error('Authentication failed. Please reconnect your accounts.');
-                            });
-                        }
-                        throw new Error(`Failed to migrate labels: ${response.statusText}`);
+            // Prepare the full migration request body
+            const fullMigrationRequestBody = {
+                max_emails_per_label: 100,
+                credentials: {
+                    gmail: gmailCredentials,
+                    destination: {
+                        token: outlookToken,
+                        provider: 'outlook'
                     }
-                    return response.json();
-                })
-                .then(labelsResult => {
-                    logToConsole(`Successfully migrated ${Object.keys(labelsResult).length} labels to folders`, 'success');
+                }
+            };
 
-                    // Then migrate all emails
-                    logToConsole('Migrating all emails...', 'info');
+            // Choose the appropriate endpoint based on the selected migration type
+            const endpoint = useImportApi
+                ? '/migration/gmail-to-outlook/import-all'
+                : '/migration/gmail-to-outlook/all';
 
-                    // Prepare the full migration request body
-                    const fullMigrationRequestBody = {
-                        max_emails_per_label: 100,
-                        credentials: {
-                            gmail: gmailCredentials,
-                            destination: {
-                                token: outlookToken,
-                                provider: 'outlook'
-                            }
-                        }
-                    };
+            return fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(fullMigrationRequestBody)
+            });
+        })
+        .then(response => {
+            console.log('Migration response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`Failed to migrate emails: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(migrationResult => {
+            console.log('Migration result:', migrationResult);
 
-                    return fetch('/migration/gmail-to-outlook/all', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(fullMigrationRequestBody)
-                    });
-                })
-                .then(response => {
-                    console.log('Migration response status:', response.status);
-                    if (!response.ok) {
-                        throw new Error(`Failed to migrate emails: ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-                .then(migrationResult => {
-                    console.log('Migration result:', migrationResult);
+            // Log the results
+            const successCount = migrationResult.successful || 0;
+            const totalCount = migrationResult.total || 0;
+            const failedCount = migrationResult.failed || 0;
 
-                    // Log the results
-                    const successCount = migrationResult.successful || 0;
-                    const totalCount = migrationResult.total || 0;
-                    const failedCount = migrationResult.failed || 0;
+            logToConsole(`Migration complete: ${successCount} of ${totalCount} emails migrated successfully`, 'success');
 
-                    logToConsole(`Migration complete: ${successCount} of ${totalCount} emails migrated successfully`, 'success');
+            if (failedCount > 0) {
+                logToConsole(`[WARNING] ${failedCount} emails failed to migrate`, 'warning');
+            }
 
-                    if (failedCount > 0) {
-                        logToConsole(`[WARNING] ${failedCount} emails failed to migrate`, 'warning');
-                    }
+            // The UI will be updated by the SSE connection
+        })
+        .catch(error => {
+            console.error('Migration error:', error);
+            logToConsole(`Migration error: ${error.message}`, 'error');
 
-                    // The UI will be updated by the SSE connection
-                })
-                .catch(error => {
-                    console.error('Migration error:', error);
-                    logToConsole(`Migration error: ${error.message}`, 'error');
+            // Show error message to the user
+            const errorElement = document.createElement('div');
+            errorElement.className = 'alert alert-danger';
+            errorElement.textContent = `Migration Failed: ${error.message}`;
 
-                    // Show error message to the user
-                    const errorElement = document.createElement('div');
-                    errorElement.className = 'alert alert-danger';
-                    errorElement.textContent = `Migration Failed: ${error.message}`;
+            // Insert the error message at the top of the page
+            const container = document.querySelector('.container') || document.body;
+            container.insertBefore(errorElement, container.firstChild);
 
-                    // Insert the error message at the top of the page
-                    const container = document.querySelector('.container') || document.body;
-                    container.insertBefore(errorElement, container.firstChild);
+            // Update button state
+            resetMigrationButton();
 
-                    // Update button state
-                    resetMigrationButton();
+            // Check if it's an authentication error
+            if (error.message.includes('authentication') ||
+                error.message.includes('Authentication') ||
+                error.message.includes('Unauthorized') ||
+                error.message.includes('unauthorized') ||
+                error.message.includes('token') ||
+                error.message.includes('credentials')) {
 
-                    // Check if it's an authentication error
-                    if (error.message.includes('authentication') ||
-                        error.message.includes('Authentication') ||
-                        error.message.includes('Unauthorized') ||
-                        error.message.includes('unauthorized') ||
-                        error.message.includes('token') ||
-                        error.message.includes('credentials')) {
-
-                        console.log('Authentication-related error detected, resetting connections');
-                        // Force reset all authentication state and UI
-                        forceResetAuthState();
-                    }
-
-                    // Close the event source
-                    if (migrationEventSource) {
-                        migrationEventSource.close();
-                        migrationEventSource = null;
-                    }
-                });
-            } catch (error) {
-                console.error('Token refresh error:', error);
-                logToConsole(`Token refresh error: ${error.message}`, 'error');
-
-                // Show error message to the user
-                const errorElement = document.createElement('div');
-                errorElement.className = 'alert alert-danger';
-                errorElement.textContent = `Migration Failed: Token refresh error - ${error.message}`;
-
-                // Insert the error message at the top of the page
-                const container = document.querySelector('.container') || document.body;
-                container.insertBefore(errorElement, container.firstChild);
-
-                // Reset the migration button
-                resetMigrationButton();
-
+                console.log('Authentication-related error detected, resetting connections');
                 // Force reset all authentication state and UI
                 forceResetAuthState();
             }
-        } else {
-            logToConsole(`Migration to ${destination} is not implemented yet`, 'warning');
-            resetMigrationButton();
-        }
+
+            // Close the event source
+            if (migrationEventSource) {
+                migrationEventSource.close();
+                migrationEventSource = null;
+            }
+        });
     } catch (error) {
         console.error('Migration error:', error);
         logToConsole(`Error during migration: ${error.message}`, 'error');
@@ -1133,26 +1083,30 @@ function initializeBatchSizeSlider() {
 
 // Function to initialize migration options
 function initializeMigrationOptions() {
-    // Add ripple effect to buttons
-    const buttons = document.querySelectorAll('.button');
-    buttons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            const rect = button.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+    const migrationOptionsContainer = document.getElementById('migrationOptions');
+    if (!migrationOptionsContainer) return;
 
-            const ripple = document.createElement('span');
-            ripple.classList.add('ripple');
-            ripple.style.left = `${x}px`;
-            ripple.style.top = `${y}px`;
+    // Add migration type selection
+    const migrationTypeHTML = `
+        <div class="option-group">
+            <h3>Migration Method</h3>
+            <div class="radio-group">
+                <div class="radio-option">
+                    <input type="radio" id="regularMigration" name="migrationType" value="regular" checked>
+                    <label for="regularMigration">Regular Migration</label>
+                    <p class="option-description">Standard migration that preserves basic email content and structure.</p>
+                </div>
+                <div class="radio-option">
+                    <input type="radio" id="importApiMigration" name="migrationType" value="import">
+                    <label for="importApiMigration">Import API Migration</label>
+                    <p class="option-description">Uses the Import API to preserve all email headers (to, from, bcc, replyto, date, etc.)</p>
+                </div>
+            </div>
+        </div>
+    `;
 
-            button.appendChild(ripple);
-
-            setTimeout(() => {
-                ripple.remove();
-            }, 600);
-        });
-    });
+    // Insert the migration type options at the beginning of the container
+    migrationOptionsContainer.insertAdjacentHTML('afterbegin', migrationTypeHTML);
 }
 
 // Function to initialize Google Sign-In

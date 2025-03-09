@@ -63,6 +63,67 @@
             }
         };
     </script>
+
+    <style>
+        /* Migration Options Styles */
+        .migration-options {
+            margin-bottom: 20px;
+        }
+
+        .option-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .option-group h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            transition: all 0.2s ease;
+        }
+
+        .radio-option:hover {
+            border-color: #007aff;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.1);
+        }
+
+        .radio-option input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .radio-option label {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+
+        .option-description {
+            margin: 5px 0 0 25px;
+            font-size: 13px;
+            color: #666;
+            line-height: 1.4;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -222,9 +283,21 @@
                 </div>
             </section>
 
-            <button class="button primary start-button" id="startMigration" onclick="performMigration()" disabled data-tooltip="Please connect both source and destination accounts to start migration">
-                <i class="fas fa-play"></i> Start Migration
-            </button>
+            <!-- Migration Options -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Migration Options</h2>
+                </div>
+                <div class="card-body">
+                    <div id="migrationOptions" class="migration-options">
+                        <!-- Migration options will be added here by JavaScript -->
+                    </div>
+
+                    <button class="button primary start-button" id="startMigration" onclick="performMigration()" disabled data-tooltip="Please connect both source and destination accounts to start migration">
+                        <i class="fas fa-play"></i> Start Migration
+                    </button>
+                </div>
+            </div>
 
             <!-- Migration Status Section -->
             <div id="migrationStatus" class="migration-status-container" style="display: none;">

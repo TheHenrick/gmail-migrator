@@ -1,5 +1,6 @@
 """Service for migrating emails from Gmail to Outlook."""
 
+import base64
 import logging
 
 # Type checking imports
@@ -434,3 +435,186 @@ class GmailToOutlookMigrationService:
         )
 
         return results
+
+    async def import_all_emails(
+        self, max_emails_per_batch: int = 100
+    ) -> dict[str, Any]:
+        """
+        Import all emails from Gmail to Outlook using the import API.
+
+        This preserves all email headers including to, from, bcc, replyto, date, etc.
+
+        Args:
+            max_emails_per_batch: Maximum number of emails to process in each batch
+
+        Returns:
+            Dict with import results
+        """
+        logger.info("Starting full email import from Gmail to Outlook")
+        await self._update_status(
+            {
+                "status": "running",
+                "logs": "Starting full email import from Gmail to Outlook",
+            }
+        )
+
+        # First, migrate labels to folders to create the folder structure
+        folder_mapping = await self.migrate_labels_to_folders()
+        self.folder_mapping = folder_mapping
+
+        # Get all Gmail labels
+        gmail_labels = self.labels_service.get_all_labels()
+        total_labels = len(gmail_labels)
+
+        await self._update_status(
+            {
+                "total_labels": total_labels,
+                "processed_labels": 0,
+                "logs": f"Found {total_labels} labels in Gmail",
+            }
+        )
+
+        # Track overall statistics
+        total_emails = 0
+        successful_emails = 0
+        failed_emails = 0
+        failed_email_ids = []
+
+        # Process each label
+        for label_index, label in enumerate(gmail_labels):
+            label_id = label.get("id", "")
+            label_name = label.get("name", "")
+
+            await self._update_status(
+                {
+                    "current_label": label_name,
+                    "processed_labels": label_index,
+                    "logs": f"Processing label: {label_name} "
+                    f"({label_index + 1}/{total_labels})",
+                }
+            )
+
+            # Get the corresponding Outlook folder ID
+            folder_id = self.folder_mapping.get(label_id)
+            if not folder_id:
+                logger.warning(f"No folder mapping found for label: {label_name}")
+                await self._update_status(
+                    {"logs": f"Skipping label {label_name} - no folder mapping found"}
+                )
+                continue
+
+            # Get emails for this label
+            try:
+                # Get emails in batches to avoid memory issues
+                batch_count = 0
+                for email_batch in self.gmail_client.get_email_batches(
+                    query=f"label:{label_id}", batch_size=max_emails_per_batch
+                ):
+                    batch_count += 1
+                    batch_size = len(email_batch)
+
+                    await self._update_status(
+                        {
+                            "logs": (
+                                f"Processing batch {batch_count} with {batch_size} "
+                                f"emails for label {label_name}"
+                            )
+                        }
+                    )
+
+                    # Process each email in the batch
+                    for email_index, email in enumerate(email_batch):
+                        email_id = email.get("id", "")
+                        total_emails += 1
+
+                        try:
+                            # Get the full email content with all headers
+                            full_email = self.gmail_client.get_email_content(email_id)
+
+                            # Get the raw MIME content
+                            raw_content = full_email.get("raw", "")
+                            if not raw_content:
+                                logger.warning(
+                                    f"No raw content found for email {email_id}"
+                                )
+                                failed_emails += 1
+                                failed_email_ids.append(email_id)
+                                continue
+
+                            # Decode the raw content
+                            mime_content = base64.urlsafe_b64decode(raw_content).decode(
+                                "utf-8"
+                            )
+
+                            # Import the email to Outlook
+                            result = self.outlook_client.import_email(
+                                mime_content=mime_content, folder_id=folder_id
+                            )
+
+                            if result and "id" in result:
+                                successful_emails += 1
+                                logger.info(
+                                    f"Successfully imported email {email_id} to Outlook"
+                                )
+                            else:
+                                failed_emails += 1
+                                failed_email_ids.append(email_id)
+                                logger.warning(
+                                    f"Failed to import email {email_id} to Outlook"
+                                )
+
+                            # Update status
+                            await self._update_status(
+                                {
+                                    "total_emails": total_emails,
+                                    "processed_emails": total_emails,
+                                    "successful_emails": successful_emails,
+                                    "failed_emails": failed_emails,
+                                    "logs": (
+                                        f"Processed email {email_index + 1}/{batch_size} "
+                                        f"in batch {batch_count} for label {label_name}"
+                                    ),
+                                }
+                            )
+
+                        except Exception as e:
+                            logger.exception(f"Error processing email {email_id}")
+                            failed_emails += 1
+                            failed_email_ids.append(email_id)
+                            await self._update_status(
+                                {
+                                    "total_emails": total_emails,
+                                    "processed_emails": total_emails,
+                                    "successful_emails": successful_emails,
+                                    "failed_emails": failed_emails,
+                                    "logs": (
+                                        f"Error processing email {email_id}: "
+                                        f"{str(e)}"
+                                    ),
+                                }
+                            )
+
+            except Exception as e:
+                logger.exception(f"Error processing label {label_name}")
+                await self._update_status(
+                    {"logs": f"Error processing label {label_name}: {str(e)}"}
+                )
+
+        # Update final status
+        await self._update_status(
+            {
+                "status": "completed",
+                "processed_labels": total_labels,
+                "logs": (
+                    f"Import completed. Total: {total_emails}, "
+                    f"Successful: {successful_emails}, Failed: {failed_emails}"
+                ),
+            }
+        )
+
+        return {
+            "total": total_emails,
+            "successful": successful_emails,
+            "failed": failed_emails,
+            "failed_ids": failed_email_ids,
+        }

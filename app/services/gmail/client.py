@@ -310,9 +310,20 @@ class GmailClient:
             result = (
                 self.service.users()
                 .messages()
-                .get(userId="me", id=message_id)
+                .get(userId="me", id=message_id, format="full")
                 .execute()
             )
+
+            # Get the raw message for MIME content preservation
+            raw_result = (
+                self.service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="raw")
+                .execute()
+            )
+
+            # Add raw content to the result
+            result["raw"] = raw_result.get("raw", "")
 
             return self.parse_email_content(result)
         except HttpError:
@@ -374,6 +385,10 @@ class GmailClient:
             "body": {"plain": "", "html": ""},
             "attachments": [],
         }
+
+        # Add raw content if available
+        if "raw" in message:
+            email_data["raw"] = message.get("raw", "")
 
         # Process headers
         if "payload" in message and "headers" in message["payload"]:

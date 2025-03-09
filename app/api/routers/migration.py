@@ -375,10 +375,10 @@ async def migrate_all_emails(
     Migrate all emails from Gmail to Outlook.
 
     Args:
-        request: The migration request containing credentials and options.
+        request: Migration request with credentials and options
 
     Returns:
-        A dictionary with migration statistics.
+        Dict with migration results
     """
     try:
         # Validate credentials
@@ -448,3 +448,88 @@ async def migrate_all_emails(
     except Exception as e:
         logger.exception("Migration error")
         _raise_bad_request(f"Failed to migrate emails: {str(e)}")
+
+
+@router.post("/gmail-to-outlook/import-all", response_model=dict)
+async def import_all_emails(
+    request: FullMigrationRequest,
+) -> dict:
+    """
+    Import all emails from Gmail to Outlook using the import API.
+
+    This preserves all email headers including to, from, bcc, replyto, date, etc.
+
+    Args:
+        request: Migration request with credentials and options
+
+    Returns:
+        Dict with import results
+    """
+    try:
+        # Reset migration state
+        # Using global here to update the shared state across requests
+        global migration_state
+        migration_state = {
+            "status": "initializing",
+            "total_emails": 0,
+            "processed_emails": 0,
+            "successful_emails": 0,
+            "failed_emails": 0,
+            "current_label": "",
+            "total_labels": 0,
+            "processed_labels": 0,
+            "logs": ["Initializing email import..."],
+        }
+
+        # Validate credentials
+        _validate_credentials(request.credentials)
+
+        # Get Gmail client
+        gmail_credentials = request.credentials.gmail.dict()
+        gmail_client = GmailClient(credentials=gmail_credentials)
+
+        # Get Outlook client
+        outlook_token = request.credentials.destination.token
+        outlook_client = OutlookClient(access_token=outlook_token)
+
+        # Create migration service
+        migration_service = GmailToOutlookMigrationService(
+            gmail_client=gmail_client, outlook_client=outlook_client
+        )
+
+        # Set up status update callback
+        migration_service.update_status_callback = update_migration_state
+
+        # Start the import process
+        await update_migration_state(
+            {"status": "running", "logs": "Starting import..."}
+        )
+
+        # Run the import
+        results = await migration_service.import_all_emails(
+            max_emails_per_batch=request.max_emails_per_label
+        )
+
+        # Update final status
+        await update_migration_state(
+            {
+                "status": "completed",
+                "logs": f"Import completed. Total: {results['total']}, "
+                f"Successful: {results['successful']}, Failed: {results['failed']}",
+            }
+        )
+
+        return {
+            "status": "completed",
+            "results": results,
+        }
+
+    except Exception as e:
+        logger.exception("Error during email import")
+        await update_migration_state(
+            {"status": "failed", "logs": f"Import failed: {str(e)}"}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
+        ) from e
